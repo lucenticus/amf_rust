@@ -8,3 +8,6 @@ edition = "2021"
 [build-dependencies]
 bindgen = "0.64.0"
 windows-bindgen = "0.44.0"
+
+[dependencies]
+libloading = "0.7.4"
