@@ -9,7 +9,11 @@ fn main() {
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
-
+    cc::Build::new()
+        .file("./AMF/amf/public/samples/SamplesC/common/AMFFactoryC.c")
+        .file("./AMF/amf/public/samples/SamplesC/common/ThreadWindowsC.c")
+        .file("./AMF/amf/public/samples/SamplesC/common/TraceAdapterC.c")
+        .compile("libAMFcommon.a");
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
     // the resulting bindings.

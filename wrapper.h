@@ -7,3 +7,6 @@
 #include "./AMF/amf/public/include/core/Factory.h"
 #include "./AMF/amf/public/include/core/Version.h"
 #include "./AMF/amf/public/include/components/VideoEncoderVCE.h"
+#include "./AMF/amf/public/samples/SamplesC/common/AMFFactoryC.h"
+#include "./AMF/amf/public/samples/SamplesC/common/ThreadC.h"
+#include "./AMF/amf/public/samples/SamplesC/common/TraceAdapterC.h"
