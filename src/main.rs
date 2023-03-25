@@ -20,18 +20,21 @@ static rectSize: amf_int32 = 50;
 static mut pColor1: *mut AMFSurface = std::ptr::null_mut();
 static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
 
+use widestring::{U16CString};
+
 fn main() {
     unsafe{
         let mut res = AMFFactoryHelper_Init();
+        let console = U16CString::from_str("Console").unwrap();
+        let debug_output = U16CString::from_str("DebugOutput").unwrap();
         println!("AMFFactoryHelper_Init result: {:?}", res);
-
         res = AMFTraceSetGlobalLevel((AMF_TRACE_DEBUG as i32).try_into().unwrap());
         println!("AMFTraceSetGlobalLevel result: {:?}", res);
-        let mut is_ok = AMFTraceEnableWriter(AMF_TRACE_WRITER_CONSOLE.as_ptr() as *const wchar_t, 1);
+        let mut is_ok = AMFTraceEnableWriter(console.as_ptr(), 1);
         println!("AMFTraceEnableWriter result: {:?}", is_ok);
-        is_ok = AMFTraceEnableWriter(AMF_TRACE_WRITER_DEBUG_OUTPUT.as_ptr() as *const wchar_t, 1);
+        is_ok = AMFTraceEnableWriter(debug_output.as_ptr(), 1);
         println!("AMFTraceEnableWriter result: {:?}", is_ok);
-        res = AMFTraceSetWriterLevel(AMF_TRACE_WRITER_CONSOLE.as_ptr() as *const wchar_t, (AMF_TRACE_DEBUG as i32).try_into().unwrap());
+        res = AMFTraceSetWriterLevel(console.as_ptr(), (AMF_TRACE_DEBUG as i32).try_into().unwrap());
         println!("AMFTraceSetGlobalLevel result: {:?}", res);
 
         let factory = AMFFactoryHelper_GetFactory();
@@ -42,7 +45,8 @@ fn main() {
         res = ((*context).pVtbl.as_ref().unwrap().InitDX11.unwrap())(context, std::ptr::null_mut(), AMF_DX_VERSION_AMF_DX11_0); // can be DX11 device
         println!("InitDX11 result: {:?}", res);
         PrepareFillDX11(context);
-        res = (*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, AMFVideoEncoderVCE_AVC.as_ptr() as *const wchar_t, &mut encoder);
+        let id = U16CString::from_str("AMFVideoEncoderVCE_AVC").unwrap();
+        res = (*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, id.as_ptr(), &mut encoder);
         println!("CreateComponent result: {:?}", res);
     }
 }

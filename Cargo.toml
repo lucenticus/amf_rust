@@ -13,3 +13,4 @@ cc = "1.0.79"
 [dependencies]
 cc = "1.0.79"
 libloading = "0.7.4"
+widestring = "1.0.2"
