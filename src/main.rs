@@ -9,7 +9,7 @@ static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
 
 static widthIn: amf_int32 = 1920;
 static heightIn: amf_int32 = 1080;
-//static frameRateIn: amf_int32 = 30;
+static frameRateIn: amf_int32 = 30;
 ///static bitRateIn: amf_int64 = 5000000i64;
 static rectSize: amf_int32 = 50;
 //static frameCount: amf_int32 = 500;
@@ -48,7 +48,51 @@ fn main() {
         let id = U16CString::from_str("AMFVideoEncoderVCE_AVC").unwrap();
         res = (*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, id.as_ptr(), &mut encoder);
         println!("CreateComponent result: {:?}", res);
+
+        let size: AMFSize = AMFConstructSize(widthIn, heightIn);
+        let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
+        let usage = "Usage";
+        AMFAssignPropertyInt64(&mut res, encoder, usage, AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64);
+        println!("AMFAssignPropertyInt64 result: {:?}", res);
     }
+}
+
+#[inline]
+fn AMFVariantAssignInt64(p_dest: &mut AMFVariantStruct, value: i64) -> AMF_RESULT {
+    let err_ret = AMFVariantInit(p_dest);
+    if err_ret == AMF_RESULT_AMF_OK {
+        (*p_dest).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_INT64;
+        (*p_dest).__bindgen_anon_1.int64Value = value;
+    }
+    err_ret
+}
+
+#[inline]
+fn AMFVariantInit(p_variant: &mut AMFVariantStruct) -> AMF_RESULT {
+    (*p_variant).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY;
+    AMF_RESULT_AMF_OK
+}
+
+fn AMFAssignPropertyInt64(
+    res: &mut AMF_RESULT,
+    p_this: *mut AMFComponent,
+    name: &str,
+    val: i64,
+) {
+    let mut var = AMFVariantStruct{type_:AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY, __bindgen_anon_1:AMFVariantStruct__bindgen_ty_1{int64Value: 0}};
+    AMFVariantAssignInt64(&mut var, val);
+    let property_name = U16CString::from_str(name).unwrap();
+    unsafe{
+        *res = (*p_this).pVtbl.as_ref().unwrap().SetProperty.unwrap()(p_this, property_name.as_ptr(), var);
+    }
+}
+
+fn AMFConstructSize(width: i32, height: i32) -> AMFSize {
+    AMFSize { width, height }
+}
+
+fn AMFConstructRate(num: u32, den: u32) -> AMFRate {
+    AMFRate { num, den }
 }
 
 fn PrepareFillDX11(context: *mut AMFContext) {
