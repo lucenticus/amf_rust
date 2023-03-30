@@ -3,6 +3,10 @@
 #![allow(non_snake_case)]
 
 include!("bindings.rs");
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
+
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
 static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
@@ -12,10 +16,10 @@ static heightIn: amf_int32 = 1080;
 static frameRateIn: amf_int32 = 30;
 static bitRateIn: amf_int64 = 5000000i64;
 static rectSize: amf_int32 = 50;
-//static frameCount: amf_int32 = 500;
+static frameCount: amf_int32 = 500;
 
-//static xPos: amf_int32 = 0;
-//static yPos: amf_int32 = 0;
+static mut xPos: amf_int32 = 0;
+static mut yPos: amf_int32 = 0;
 
 static mut pColor1: *mut AMFSurface = std::ptr::null_mut();
 static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
@@ -62,6 +66,37 @@ fn main() {
         println!("AMFAssignPropertySize frameSize result: {:?}", res);
         res = (*encoder).pVtbl.as_ref().unwrap().Init.unwrap()(encoder, formatIn, widthIn, heightIn);
         println!("encoder->Init() result: {:?}", res);
+        let mut submitted = 0;
+        let frame_count = 100; // Replace with your desired frame count
+        //let mut file = File::create(Path::new("./output.mp4"));
+
+        let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
+
+        //while submitted < frameCount {
+            //if surfaceIn.is_none() {
+                surfaceIn = std::ptr::null_mut();
+                res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
+                println!("AllocSurface() result: {:?}", res);
+                FillSurfaceDX11(context, surfaceIn);
+            //}
+        //}
+        //file.flush();
+        //drop(file); // Close the output file
+
+        // Clean up in this order
+        //if !surfaceIn.is_none() {
+            (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
+            surfaceIn = std::ptr::null_mut();
+        //}
+
+        (*encoder).pVtbl.as_ref().unwrap().Terminate.unwrap()(encoder);
+        (*encoder).pVtbl.as_ref().unwrap().Release.unwrap()(encoder);
+        encoder = std::ptr::null_mut();
+
+        (*context).pVtbl.as_ref().unwrap().Terminate.unwrap()(context);
+        (*context).pVtbl.as_ref().unwrap().Release.unwrap()(context);
+        context = std::ptr::null_mut();
+        AMFFactoryHelper_Terminate();
     }
 }
 
@@ -171,4 +206,73 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
             }
         }
     }
+}
+
+fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result<(), std::io::Error> {
+    let mut device_dx11: *mut ID3D11Device = std::ptr::null_mut();
+    let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
+    let mut surface_dx11: *mut ID3D11Texture2D = std::ptr::null_mut();
+    let mut surface_dx11_color1: *mut ID3D11Texture2D = std::ptr::null_mut();
+    let mut surface_dx11_color2: *mut ID3D11Texture2D = std::ptr::null_mut();
+
+    unsafe {
+        // Get native DX objects
+        device_dx11 = (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(context, AMF_DX_VERSION_AMF_DX11_0) as *mut ID3D11Device;
+        let plane: *mut AMFPlane  = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
+        surface_dx11 = (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
+        (*device_dx11).lpVtbl.as_ref().unwrap().GetImmediateContext.unwrap()(device_dx11, &mut device_context_dx11);
+
+
+        // Fill the surface with color1
+        let planeColor1:*mut AMFPlane  = (*pColor1).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor1, 0);
+        surface_dx11_color1 = (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1) as *mut ID3D11Texture2D;
+        (*device_context_dx11).lpVtbl.as_ref().unwrap().CopyResource.unwrap()(
+            device_context_dx11,
+            surface_dx11 as *mut ID3D11Resource,
+            surface_dx11_color1 as *mut ID3D11Resource,
+        );
+
+        if xPos + rectSize > widthIn {
+            xPos = 0;
+        }
+        if yPos + rectSize > heightIn {
+            yPos = 0;
+        }
+
+        // Fill the surface with color2
+        let rect = D3D11_BOX {
+            left: 0,
+            top: 0,
+            front: 0,
+            right: rectSize as u32,
+            bottom: rectSize as u32,
+            back: 1,
+        };
+
+        let planeColor2:*mut AMFPlane  = (*pColor2).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor2, 0);
+        surface_dx11_color2 = (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2) as *mut ID3D11Texture2D;
+        (*device_context_dx11).lpVtbl.as_ref().unwrap().CopySubresourceRegion.unwrap()(
+            device_context_dx11,
+            surface_dx11 as *mut ID3D11Resource,
+            0,
+            xPos as u32,
+            yPos as u32,
+            0,
+            surface_dx11_color2 as *mut ID3D11Resource,
+            0,
+            & rect,
+        );
+
+
+        (*device_context_dx11).lpVtbl.as_ref().unwrap().Flush.unwrap()(device_context_dx11);
+
+        // Update x_pos and y_pos
+        xPos += 2;
+        yPos += 2;
+
+        // Release device context
+        (*device_context_dx11).lpVtbl.as_ref().unwrap().Release.unwrap()(device_context_dx11);
+    }
+
+    Ok(())
 }
