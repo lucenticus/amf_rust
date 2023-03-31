@@ -27,7 +27,7 @@ static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
 
 use widestring::{U16CString};
 
-fn main() {
+fn main() -> std::io::Result<()> {
     unsafe{
         let mut res = AMFFactoryHelper_Init();
         let console = U16CString::from_str("Console").unwrap();
@@ -39,7 +39,7 @@ fn main() {
         println!("AMFTraceEnableWriter result: {:?}", is_ok);
         is_ok = AMFTraceEnableWriter(debug_output.as_ptr(), 1);
         println!("AMFTraceEnableWriter result: {:?}", is_ok);
-        res = AMFTraceSetWriterLevel(console.as_ptr(), (AMF_TRACE_DEBUG as i32).try_into().unwrap());
+        res = AMFTraceSetWriterLevel(console.as_ptr(), AMF_TRACE_DEBUG as i32);
         println!("AMFTraceSetGlobalLevel result: {:?}", res);
 
         let factory = AMFFactoryHelper_GetFactory();
@@ -68,7 +68,6 @@ fn main() {
         res = (*encoder).pVtbl.as_ref().unwrap().Init.unwrap()(encoder, formatIn, widthIn, heightIn);
         println!("encoder->Init() result: {:?}", res);
         let mut submitted = 0;
-        let frame_count = 100; // Replace with your desired frame count
         let mut file = File::create(Path::new("./output.mp4")).unwrap();
 
         let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
@@ -78,7 +77,7 @@ fn main() {
                 //surfaceIn = std::ptr::null_mut();
                 res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
                 println!("AllocSurface() result: {:?}", res);
-                FillSurfaceDX11(context, surfaceIn);
+                FillSurfaceDX11(context, surfaceIn)?;
             }
             res = (*encoder).pVtbl.as_ref().unwrap().SubmitInput.unwrap()(encoder, surfaceIn as *mut AMFData);
             if res != AMF_RESULT_AMF_INPUT_FULL {
@@ -103,13 +102,12 @@ fn main() {
                 (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
             }
         }
-        file.flush();
+        file.flush()?;
         drop(file); // Close the output file
 
         // Clean up in this order
         if !surfaceIn.is_null() {
             (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
-            surfaceIn = std::ptr::null_mut();
         }
 
         (*encoder).pVtbl.as_ref().unwrap().Terminate.unwrap()(encoder);
@@ -121,6 +119,7 @@ fn main() {
         context = std::ptr::null_mut();
         AMFFactoryHelper_Terminate();
     }
+    Ok(())
 }
 
 #[inline]
@@ -232,23 +231,19 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
 }
 
 fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result<(), std::io::Error> {
-    let mut device_dx11: *mut ID3D11Device = std::ptr::null_mut();
     let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
-    let mut surface_dx11: *mut ID3D11Texture2D = std::ptr::null_mut();
-    let mut surface_dx11_color1: *mut ID3D11Texture2D = std::ptr::null_mut();
-    let mut surface_dx11_color2: *mut ID3D11Texture2D = std::ptr::null_mut();
 
     unsafe {
         // Get native DX objects
-        device_dx11 = (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(context, AMF_DX_VERSION_AMF_DX11_0) as *mut ID3D11Device;
+        let device_dx11: *mut ID3D11Device = (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(context, AMF_DX_VERSION_AMF_DX11_0) as *mut ID3D11Device;
         let plane: *mut AMFPlane  = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
-        surface_dx11 = (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
+        let surface_dx11: *mut ID3D11Texture2D = (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
         (*device_dx11).lpVtbl.as_ref().unwrap().GetImmediateContext.unwrap()(device_dx11, &mut device_context_dx11);
 
 
         // Fill the surface with color1
         let planeColor1:*mut AMFPlane  = (*pColor1).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor1, 0);
-        surface_dx11_color1 = (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1) as *mut ID3D11Texture2D;
+        let surface_dx11_color1: *mut ID3D11Texture2D = (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1) as *mut ID3D11Texture2D;
         (*device_context_dx11).lpVtbl.as_ref().unwrap().CopyResource.unwrap()(
             device_context_dx11,
             surface_dx11 as *mut ID3D11Resource,
@@ -273,7 +268,7 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
         };
 
         let planeColor2:*mut AMFPlane  = (*pColor2).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor2, 0);
-        surface_dx11_color2 = (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2) as *mut ID3D11Texture2D;
+        let surface_dx11_color2: *mut ID3D11Texture2D = (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2) as *mut ID3D11Texture2D;
         (*device_context_dx11).lpVtbl.as_ref().unwrap().CopySubresourceRegion.unwrap()(
             device_context_dx11,
             surface_dx11 as *mut ID3D11Resource,
