@@ -6,6 +6,7 @@ include!("bindings.rs");
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::os::raw::c_void;
 
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
@@ -68,26 +69,48 @@ fn main() {
         println!("encoder->Init() result: {:?}", res);
         let mut submitted = 0;
         let frame_count = 100; // Replace with your desired frame count
-        //let mut file = File::create(Path::new("./output.mp4"));
+        let mut file = File::create(Path::new("./output.mp4")).unwrap();
 
         let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
 
-        //while submitted < frameCount {
-            //if surfaceIn.is_none() {
-                surfaceIn = std::ptr::null_mut();
+        while submitted < frameCount {
+            if surfaceIn.is_null() {
+                //surfaceIn = std::ptr::null_mut();
                 res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
                 println!("AllocSurface() result: {:?}", res);
                 FillSurfaceDX11(context, surfaceIn);
-            //}
-        //}
-        //file.flush();
-        //drop(file); // Close the output file
+            }
+            res = (*encoder).pVtbl.as_ref().unwrap().SubmitInput.unwrap()(encoder, surfaceIn as *mut AMFData);
+            if res != AMF_RESULT_AMF_INPUT_FULL {
+                (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
+                surfaceIn = std::ptr::null_mut();
+                assert_eq!(res, AMF_RESULT_AMF_OK, "SubmitInput() failed");
+                submitted += 1;
+            }
+            let mut data: *mut AMFData = std::ptr::null_mut();
+            res = (*encoder).pVtbl.as_ref().unwrap().QueryOutput.unwrap()(encoder, &mut data);
+            if res == AMF_RESULT_AMF_EOF {
+                break; // Drain complete
+            }
+            if !data.is_null() {
+                let mut buffer: *mut AMFBuffer = std::ptr::null_mut();
+                let guid = IID_AMFBuffer();
+                (*data).pVtbl.as_ref().unwrap().QueryInterface.unwrap()(data, &guid, &mut buffer as *mut _ as *mut *mut c_void);
+                let native_buffer = (*buffer).pVtbl.as_ref().unwrap().GetNative.unwrap()(buffer);
+                let buffer_size = (*buffer).pVtbl.as_ref().unwrap().GetSize.unwrap()(buffer);
+                file.write_all(std::slice::from_raw_parts(native_buffer as *const u8, buffer_size as usize)).unwrap();
+                (*buffer).pVtbl.as_ref().unwrap().Release.unwrap()(buffer);
+                (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
+            }
+        }
+        file.flush();
+        drop(file); // Close the output file
 
         // Clean up in this order
-        //if !surfaceIn.is_none() {
+        if !surfaceIn.is_null() {
             (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
             surfaceIn = std::ptr::null_mut();
-        //}
+        }
 
         (*encoder).pVtbl.as_ref().unwrap().Terminate.unwrap()(encoder);
         (*encoder).pVtbl.as_ref().unwrap().Release.unwrap()(encoder);
@@ -275,4 +298,21 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
     }
 
     Ok(())
+}
+
+#[inline(always)]
+fn IID_AMFBuffer() -> AMFGuid {
+    AMFGuid {
+        data1: 0xb04b7248,
+        data2: 0xb6f0,
+        data3: 0x4321,
+        data41: 0xb6,
+        data42: 0x91,
+        data43: 0xba,
+        data44: 0xa4,
+        data45: 0x74,
+        data46: 0x0f,
+        data47: 0x9f,
+        data48: 0xcb,
+    }
 }
