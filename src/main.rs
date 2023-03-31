@@ -1,3 +1,7 @@
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+
 //
 // Notice Regarding Standards.  AMD does not provide a license or sublicense to
 // any Intellectual Property Rights relating to any standards, including but not
@@ -33,11 +37,9 @@
 
 // this sample encodes NV12 frames using AMF Encoder and writes them to H.264 elmentary stream
 
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-
 include!("bindings.rs");
+mod amf_wrappers;
+use amf_wrappers::amf_trace_enable_writer;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -65,18 +67,18 @@ use widestring::{U16CString};
 fn main() -> std::io::Result<()> {
     unsafe{
         let mut res = AMFFactoryHelper_Init();
-        let console = U16CString::from_str("Console").unwrap();
-        let debug_output = U16CString::from_str("DebugOutput").unwrap();
         println!("AMFFactoryHelper_Init result: {:?}", res);
         res = AMFTraceSetGlobalLevel((AMF_TRACE_DEBUG as i32).try_into().unwrap());
         println!("AMFTraceSetGlobalLevel result: {:?}", res);
-        let mut is_ok = AMFTraceEnableWriter(console.as_ptr(), 1);
-        println!("AMFTraceEnableWriter result: {:?}", is_ok);
-        is_ok = AMFTraceEnableWriter(debug_output.as_ptr(), 1);
-        println!("AMFTraceEnableWriter result: {:?}", is_ok);
-        res = AMFTraceSetWriterLevel(console.as_ptr(), AMF_TRACE_DEBUG as i32);
+    }
+    let mut is_ok = amf_trace_enable_writer("Console", true);
+    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    is_ok = amf_trace_enable_writer("DebugOutput", true);
+    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    unsafe{
+        let console = U16CString::from_str("Console").unwrap();
+        let mut res = AMFTraceSetWriterLevel(console.as_ptr(), AMF_TRACE_DEBUG as i32);
         println!("AMFTraceSetGlobalLevel result: {:?}", res);
-
         let factory = AMFFactoryHelper_GetFactory();
         let mut context: *mut AMFContext = std::ptr::null_mut();
         let mut encoder: *mut AMFComponent  = std::ptr::null_mut();
