@@ -101,28 +101,31 @@ fn main() -> std::io::Result<()> {
     if res_create_component != AMF_RESULT_AMF_OK {
         panic!("CreateComponent failed");
     }
-    unsafe{
-        let mut res = AMF_RESULT_AMF_OK;
-   let size: AMFSize = AMFConstructSize(widthIn, heightIn);
-        let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
-        let usage = "Usage";
-        AMFAssignPropertyInt64(&mut res, encoder, usage, AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64);
-        println!("AMFAssignPropertyInt64 usage result: {:?}", res);
-        let bitrate = "TargetBitrate";
-        AMFAssignPropertyInt64(&mut res, encoder, bitrate, bitRateIn);
-        println!("AMFAssignPropertyInt64 bitrate result: {:?}", res);
-        let frameSize = "FrameSize";
-        AMFAssignPropertySize(&mut res, encoder, frameSize, size);
-        println!("AMFAssignPropertySize frameSize result: {:?}", res);
-        res = (*encoder).pVtbl.as_ref().unwrap().Init.unwrap()(encoder, formatIn, widthIn, heightIn);
-        println!("encoder->Init() result: {:?}", res);
-        let mut submitted = 0;
-        let mut file = File::create(Path::new("./output.mp4")).unwrap();
+    let mut res = AMF_RESULT_AMF_OK;
+    let size: AMFSize = AMFConstructSize(widthIn, heightIn);
+    let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
+    let usage = "Usage";
+    AMFAssignPropertyInt64(&mut res, encoder, usage, AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64);
+    println!("AMFAssignPropertyInt64 usage result: {:?}", res);
+    let bitrate = "TargetBitrate";
+    AMFAssignPropertyInt64(&mut res, encoder, bitrate, bitRateIn);
+    println!("AMFAssignPropertyInt64 bitrate result: {:?}", res);
+    let frameSize = "FrameSize";
+    AMFAssignPropertySize(&mut res, encoder, frameSize, size);
+    println!("AMFAssignPropertySize frameSize result: {:?}", res);
 
-        let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
+    let res_init_encoder = init_encoder(encoder, formatIn, widthIn, heightIn);
+    println!("Encoder Init() result: {:?}", res_init_encoder);
+    if res_init_encoder != AMF_RESULT_AMF_OK {
+        panic!("Encoder Init() failed");
+    }
+    let mut submitted = 0;
+    let mut file = File::create(Path::new("./output.mp4"))?;
+    let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
 
-        while submitted < frameCount {
-            if surfaceIn.is_null() {
+    while submitted < frameCount {
+        unsafe{
+if surfaceIn.is_null() {
                 //surfaceIn = std::ptr::null_mut();
                 res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
                 println!("AllocSurface() result: {:?}", res);
@@ -151,9 +154,11 @@ fn main() -> std::io::Result<()> {
                 (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
             }
         }
-        file.flush()?;
-        drop(file); // Close the output file
+    }
+    file.flush()?;
+    drop(file); // Close the output file
 
+    unsafe{
         // Clean up in this order
         if !surfaceIn.is_null() {
             (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
@@ -169,61 +174,6 @@ fn main() -> std::io::Result<()> {
         AMFFactoryHelper_Terminate();
     }
     Ok(())
-}
-
-#[inline]
-fn AMFVariantAssignSize(p_dest: &mut AMFVariantStruct, value: AMFSize) -> AMF_RESULT {
-    let err_ret = AMFVariantInit(p_dest);
-    if err_ret == AMF_RESULT_AMF_OK {
-        (*p_dest).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_SIZE;
-        (*p_dest).__bindgen_anon_1.sizeValue = value;
-    }
-    err_ret
-}
-
-#[inline]
-fn AMFVariantAssignInt64(p_dest: &mut AMFVariantStruct, value: i64) -> AMF_RESULT {
-    let err_ret = AMFVariantInit(p_dest);
-    if err_ret == AMF_RESULT_AMF_OK {
-        (*p_dest).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_INT64;
-        (*p_dest).__bindgen_anon_1.int64Value = value;
-    }
-    err_ret
-}
-
-#[inline]
-fn AMFVariantInit(p_variant: &mut AMFVariantStruct) -> AMF_RESULT {
-    (*p_variant).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY;
-    AMF_RESULT_AMF_OK
-}
-
-fn AMFAssignPropertySize(
-    res: &mut AMF_RESULT,
-    p_this: *mut AMFComponent,
-    name: &str,
-    val: AMFSize,
-) {
-    let mut var = AMFVariantStruct{type_:AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY, __bindgen_anon_1:AMFVariantStruct__bindgen_ty_1{sizeValue: AMFSize{width:0,height:0}}};
-    AMFVariantAssignSize(&mut var, val);
-    let property_name = U16CString::from_str(name).unwrap();
-    unsafe{
-        *res = (*p_this).pVtbl.as_ref().unwrap().SetProperty.unwrap()(p_this, property_name.as_ptr(), var);
-    }
-}
-
-
-fn AMFAssignPropertyInt64(
-    res: &mut AMF_RESULT,
-    p_this: *mut AMFComponent,
-    name: &str,
-    val: i64,
-) {
-    let mut var = AMFVariantStruct{type_:AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY, __bindgen_anon_1:AMFVariantStruct__bindgen_ty_1{int64Value: 0}};
-    AMFVariantAssignInt64(&mut var, val);
-    let property_name = U16CString::from_str(name).unwrap();
-    unsafe{
-        *res = (*p_this).pVtbl.as_ref().unwrap().SetProperty.unwrap()(p_this, property_name.as_ptr(), var);
-    }
 }
 
 fn AMFConstructSize(width: i32, height: i32) -> AMFSize {
