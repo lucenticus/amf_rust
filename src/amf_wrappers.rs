@@ -5,6 +5,10 @@
 
 use crate::amf_bindings::*;
 use widestring::{U16CString};
+use std::os::raw::c_void;
+
+use std::fs::File;
+use std::io::Write;
 
 
 pub fn amf_trace_enable_writer(writer_name: &str, enable: bool) -> amf_bool {
@@ -191,5 +195,79 @@ pub fn query_output(encoder: *mut AMFComponent) -> Result<*mut AMFData, AMF_RESU
     match result {
         AMF_RESULT_AMF_OK => Ok(data),
         _ => Err(result),
+    }
+}
+
+pub fn query_interface(data: *mut AMFData, guid: &AMFGuid) -> Result<*mut AMFBuffer, AMF_RESULT> {
+    let mut buffer: *mut AMFBuffer = std::ptr::null_mut();
+    let result = unsafe {
+        ((*data).pVtbl.as_ref().unwrap().QueryInterface.unwrap())(data, guid, &mut buffer as *mut _ as *mut *mut c_void)
+    };
+
+    match result {
+        AMF_RESULT_AMF_OK => Ok(buffer),
+        _ => Err(result),
+    }
+}
+
+pub fn get_native(buffer: *mut AMFBuffer) -> *const u8 {
+    unsafe { ((*buffer).pVtbl.as_ref().unwrap().GetNative.unwrap())(buffer)  as *const u8 }
+}
+
+pub fn get_size(buffer: *mut AMFBuffer) -> usize {
+    unsafe { ((*buffer).pVtbl.as_ref().unwrap().GetSize.unwrap())(buffer) as usize }
+}
+
+pub fn release_buffer(buffer: *mut AMFBuffer) {
+    unsafe { ((*buffer).pVtbl.as_ref().unwrap().Release.unwrap())(buffer); }
+}
+
+pub fn release_data(data: *mut AMFData) {
+    unsafe { ((*data).pVtbl.as_ref().unwrap().Release.unwrap())(data); }
+}
+pub fn write_amf_buffer_to_file(file: &mut File, buffer: *mut AMFBuffer) -> Result<(), std::io::Error> {
+    let native_buffer = get_native(buffer);
+    let buffer_size = get_size(buffer);
+    unsafe{file.write_all(std::slice::from_raw_parts(native_buffer, buffer_size))}
+}
+
+pub fn release_surface(surface: *mut AMFSurface) -> AMF_RESULT {
+    unsafe { ((*surface).pVtbl.as_ref().unwrap().Release.unwrap())(surface) }
+}
+
+pub fn release_encoder(encoder: *mut AMFComponent) -> AMF_RESULT {
+    unsafe { ((*encoder).pVtbl.as_ref().unwrap().Release.unwrap())(encoder) }
+}
+
+pub fn release_context(context: *mut AMFContext) -> AMF_RESULT {
+    unsafe { ((*context).pVtbl.as_ref().unwrap().Release.unwrap())(context) }
+}
+
+pub fn terminate_encoder(encoder: *mut AMFComponent) -> AMF_RESULT {
+    unsafe { ((*encoder).pVtbl.as_ref().unwrap().Terminate.unwrap())(encoder) }
+}
+
+pub fn terminate_context(context: *mut AMFContext) -> AMF_RESULT {
+    unsafe { ((*context).pVtbl.as_ref().unwrap().Terminate.unwrap())(context) }
+}
+
+pub fn amf_factory_helper_terminate() {
+    unsafe { AMFFactoryHelper_Terminate(); }
+}
+
+#[inline(always)]
+pub fn IID_AMFBuffer() -> AMFGuid {
+    AMFGuid {
+        data1: 0xb04b7248,
+        data2: 0xb6f0,
+        data3: 0x4321,
+        data41: 0xb6,
+        data42: 0x91,
+        data43: 0xba,
+        data44: 0xa4,
+        data45: 0x74,
+        data46: 0x0f,
+        data47: 0x9f,
+        data48: 0xcb,
     }
 }

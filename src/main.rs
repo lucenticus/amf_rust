@@ -47,7 +47,6 @@ use amf_wrappers::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::os::raw::c_void;
 
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
@@ -65,8 +64,6 @@ static mut yPos: amf_int32 = 0;
 
 static mut pColor1: *mut AMFSurface = std::ptr::null_mut();
 static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
-
-use widestring::{U16CString};
 
 fn main() -> std::io::Result<()> {
     amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
@@ -155,44 +152,42 @@ fn main() -> std::io::Result<()> {
         match query_result {
             Ok(data) => {
                 if !data.is_null() {
-                unsafe{
-                    let mut buffer: *mut AMFBuffer = std::ptr::null_mut();
                     let guid = IID_AMFBuffer();
-                    (*data).pVtbl.as_ref().unwrap().QueryInterface.unwrap()(data, &guid, &mut buffer as *mut _ as *mut *mut c_void);
-                    let native_buffer = (*buffer).pVtbl.as_ref().unwrap().GetNative.unwrap()(buffer);
-                    let buffer_size = (*buffer).pVtbl.as_ref().unwrap().GetSize.unwrap()(buffer);
-                    file.write_all(std::slice::from_raw_parts(native_buffer as *const u8, buffer_size as usize)).unwrap();
-                    (*buffer).pVtbl.as_ref().unwrap().Release.unwrap()(buffer);
-                    (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
-                }
+                    match query_interface(data, &guid) {
+                        Ok(buffer) => {
+                            write_amf_buffer_to_file(&mut file, buffer)?;
+                            release_buffer(buffer);
+                            release_data(data);
+                        }
+                        Err(err) => {
+                            println!("QueryInterface() failed with error: {:?}", err);
+                            break;
+                        }
+                    }
                 }
             }
             Err(AMF_RESULT_AMF_EOF) => {
                 break; // Drain complete
             }
             Err(err) => {
-                // Handle other errors if necessary
+                println!("QueryOutput() failed with error: {:?}", err);
+                break;
             }
         }
     }
     file.flush()?;
     drop(file); // Close the output file
 
-    unsafe{
-        // Clean up in this order
-        if !surfaceIn.is_null() {
-            (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
-        }
-
-        (*encoder).pVtbl.as_ref().unwrap().Terminate.unwrap()(encoder);
-        (*encoder).pVtbl.as_ref().unwrap().Release.unwrap()(encoder);
-        encoder = std::ptr::null_mut();
-
-        (*context).pVtbl.as_ref().unwrap().Terminate.unwrap()(context);
-        (*context).pVtbl.as_ref().unwrap().Release.unwrap()(context);
-        context = std::ptr::null_mut();
-        AMFFactoryHelper_Terminate();
+    if !surfaceIn.is_null() {
+        release_surface(surfaceIn);
     }
+    terminate_encoder(encoder);
+    release_encoder(encoder);
+    encoder = std::ptr::null_mut();
+    terminate_context(context);
+    release_context(context);
+    context = std::ptr::null_mut();
+    amf_factory_helper_terminate();
     Ok(())
 }
 
@@ -312,21 +307,4 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
     }
 
     Ok(())
-}
-
-#[inline(always)]
-fn IID_AMFBuffer() -> AMFGuid {
-    AMFGuid {
-        data1: 0xb04b7248,
-        data2: 0xb6f0,
-        data3: 0x4321,
-        data41: 0xb6,
-        data42: 0x91,
-        data43: 0xba,
-        data44: 0xa4,
-        data45: 0x74,
-        data46: 0x0f,
-        data47: 0x9f,
-        data48: 0xcb,
-    }
 }
