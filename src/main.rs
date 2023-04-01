@@ -42,12 +42,7 @@ mod amf_bindings;
 use amf_bindings::*;
 mod amf_wrappers;
 
-use amf_wrappers::amf_trace_enable_writer;
-use amf_wrappers::amf_factory_helper_init;
-use amf_wrappers::amf_trace_set_global_level;
-use amf_wrappers::amf_trace_set_writer_level;
-use amf_wrappers::get_amf_factory;
-use amf_wrappers::create_amf_context;
+use amf_wrappers::*;
 
 use std::fs::File;
 use std::io::Write;
@@ -89,16 +84,26 @@ fn main() -> std::io::Result<()> {
 
     let factory = get_amf_factory().expect("Failed to get AMF factory");
     let mut context = create_amf_context(factory).expect("Failed to create AMF context");
-    unsafe{
-    let mut res = ((*context).pVtbl.as_ref().unwrap().InitDX11.unwrap())(context, std::ptr::null_mut(), AMF_DX_VERSION_AMF_DX11_0); // can be DX11 device
-        println!("InitDX11 result: {:?}", res);
-        PrepareFillDX11(context as *mut AMFContext);
-        let mut encoder: *mut AMFComponent  = std::ptr::null_mut();
-        let id = U16CString::from_str("AMFVideoEncoderVCE_AVC").unwrap();
-        res = (*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, id.as_ptr(), &mut encoder);
-        println!("CreateComponent result: {:?}", res);
+    let res_init_dx11 = init_dx11(context);
+    println!("InitDX11 result: {:?}", res_init_dx11);
+    if res_init_dx11 != AMF_RESULT_AMF_OK {
+        panic!("InitDX11 failed");
+    }
+    PrepareFillDX11(context);
 
-        let size: AMFSize = AMFConstructSize(widthIn, heightIn);
+    let (res_create_component, mut encoder) = create_component(
+        factory,
+        context,
+        "AMFVideoEncoderVCE_AVC",
+    );
+
+    println!("CreateComponent result: {:?}", res_create_component);
+    if res_create_component != AMF_RESULT_AMF_OK {
+        panic!("CreateComponent failed");
+    }
+    unsafe{
+        let mut res = AMF_RESULT_AMF_OK;
+   let size: AMFSize = AMFConstructSize(widthIn, heightIn);
         let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
         let usage = "Usage";
         AMFAssignPropertyInt64(&mut res, encoder, usage, AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64);

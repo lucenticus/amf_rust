@@ -52,3 +52,22 @@ pub fn create_amf_context(factory: *mut AMFFactory) -> Result<*mut AMFContext, &
         Ok(context)
     }
 }
+
+pub fn init_dx11(context: *mut AMFContext) -> AMF_RESULT {
+    unsafe {(*context).pVtbl.as_ref().unwrap().InitDX11.unwrap()(
+        context,
+        std::ptr::null_mut(),
+        AMF_DX_VERSION_AMF_DX11_0,
+    )}
+}
+
+pub fn create_component(
+    factory: *mut AMFFactory,
+    context: *mut AMFContext,
+    component_id: &str,
+) -> (AMF_RESULT, *mut AMFComponent) {
+    let id = widestring::U16CString::from_str(component_id).unwrap();
+    let mut encoder: *mut AMFComponent = std::ptr::null_mut();
+    let result = unsafe {(*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, id.as_ptr(), &mut encoder)};
+    (result, encoder)
+}
