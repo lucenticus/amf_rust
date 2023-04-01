@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+#[allow(dead_code)]
 
 //
 // Notice Regarding Standards.  AMD does not provide a license or sublicense to
@@ -37,9 +38,17 @@
 
 // this sample encodes NV12 frames using AMF Encoder and writes them to H.264 elmentary stream
 
-include!("bindings.rs");
+mod amf_bindings;
+use amf_bindings::*;
 mod amf_wrappers;
+
 use amf_wrappers::amf_trace_enable_writer;
+use amf_wrappers::amf_factory_helper_init;
+use amf_wrappers::amf_trace_set_global_level;
+use amf_wrappers::amf_trace_set_writer_level;
+use amf_wrappers::get_amf_factory;
+use amf_wrappers::create_amf_context;
+
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -65,28 +74,26 @@ static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
 use widestring::{U16CString};
 
 fn main() -> std::io::Result<()> {
-    unsafe{
-        let mut res = AMFFactoryHelper_Init();
-        println!("AMFFactoryHelper_Init result: {:?}", res);
-        res = AMFTraceSetGlobalLevel((AMF_TRACE_DEBUG as i32).try_into().unwrap());
-        println!("AMFTraceSetGlobalLevel result: {:?}", res);
-    }
-    let mut is_ok = amf_trace_enable_writer("Console", true);
+    amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
+    println!("AMFFactoryHelper_Init succeeded");
+    let level = AMF_TRACE_DEBUG as i32;
+    let previous_level = amf_trace_set_global_level(level);
+    println!("AMFTraceSetGlobalLevel result: {:?}", previous_level);
+    let console_str = "Console";
+    let mut is_ok = amf_trace_enable_writer(console_str, true);
     println!("AMFTraceEnableWriter result: {:?}", is_ok);
     is_ok = amf_trace_enable_writer("DebugOutput", true);
     println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    let previous_level = amf_trace_set_writer_level(console_str, level);
+    println!("AMFTraceSetWriterLevel result: {:?}", previous_level);
+
+    let factory = get_amf_factory().expect("Failed to get AMF factory");
+    let mut context = create_amf_context(factory).expect("Failed to create AMF context");
     unsafe{
-        let console = U16CString::from_str("Console").unwrap();
-        let mut res = AMFTraceSetWriterLevel(console.as_ptr(), AMF_TRACE_DEBUG as i32);
-        println!("AMFTraceSetGlobalLevel result: {:?}", res);
-        let factory = AMFFactoryHelper_GetFactory();
-        let mut context: *mut AMFContext = std::ptr::null_mut();
-        let mut encoder: *mut AMFComponent  = std::ptr::null_mut();
-        res =  ((*factory).pVtbl.as_ref().unwrap().CreateContext.unwrap())(factory, &mut context);
-        println!("CreateContext result: {:?}", res);
-        res = ((*context).pVtbl.as_ref().unwrap().InitDX11.unwrap())(context, std::ptr::null_mut(), AMF_DX_VERSION_AMF_DX11_0); // can be DX11 device
+    let mut res = ((*context).pVtbl.as_ref().unwrap().InitDX11.unwrap())(context, std::ptr::null_mut(), AMF_DX_VERSION_AMF_DX11_0); // can be DX11 device
         println!("InitDX11 result: {:?}", res);
-        PrepareFillDX11(context);
+        PrepareFillDX11(context as *mut AMFContext);
+        let mut encoder: *mut AMFComponent  = std::ptr::null_mut();
         let id = U16CString::from_str("AMFVideoEncoderVCE_AVC").unwrap();
         res = (*factory).pVtbl.as_ref().unwrap().CreateComponent.unwrap()(factory, context, id.as_ptr(), &mut encoder);
         println!("CreateComponent result: {:?}", res);
@@ -114,7 +121,7 @@ fn main() -> std::io::Result<()> {
                 //surfaceIn = std::ptr::null_mut();
                 res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
                 println!("AllocSurface() result: {:?}", res);
-                FillSurfaceDX11(context, surfaceIn)?;
+                FillSurfaceDX11(context as *mut AMFContext, surfaceIn)?;
             }
             res = (*encoder).pVtbl.as_ref().unwrap().SubmitInput.unwrap()(encoder, surfaceIn as *mut AMFData);
             if res != AMF_RESULT_AMF_INPUT_FULL {
