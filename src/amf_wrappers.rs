@@ -136,3 +136,60 @@ pub fn init_encoder(
 ) -> AMF_RESULT {
     unsafe{(*encoder).pVtbl.as_ref().unwrap().Init.unwrap()(encoder, format_in, width_in, height_in)}
 }
+
+pub fn alloc_surface(
+    context: *mut AMFContext,
+    memory_type: AMF_MEMORY_TYPE,
+    format: AMF_SURFACE_FORMAT,
+    width: amf_int32,
+    height: amf_int32,
+) -> Result<*mut AMFSurface, AMF_RESULT> {
+    let mut surface: *mut AMFSurface = std::ptr::null_mut();
+    let result = unsafe {
+        ((*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap())(
+            context,
+            memory_type,
+            format,
+            width,
+            height,
+            &mut surface,
+        )
+    };
+
+    match result {
+        AMF_RESULT_AMF_OK => Ok(surface),
+        _ => Err(result),
+    }
+}
+
+// Wrapper for SubmitInput
+pub fn submit_input(encoder: *mut AMFComponent, surface: *mut AMFSurface) -> Result<(), AMF_RESULT> {
+    let result = unsafe {
+        ((*encoder).pVtbl.as_ref().unwrap().SubmitInput.unwrap())(encoder, surface as *mut AMFData)
+    };
+
+    match result {
+        AMF_RESULT_AMF_OK | AMF_RESULT_AMF_INPUT_FULL => Ok(()),
+        _ => Err(result),
+    }
+}
+
+// Wrapper for Release
+pub fn release(surface: *mut AMFSurface) {
+    unsafe {
+        (*surface).pVtbl.as_ref().unwrap().Release.unwrap()(surface);
+    }
+}
+
+// Wrapper for QueryOutput
+pub fn query_output(encoder: *mut AMFComponent) -> Result<*mut AMFData, AMF_RESULT> {
+    let mut data: *mut AMFData = std::ptr::null_mut();
+    let result = unsafe {
+        ((*encoder).pVtbl.as_ref().unwrap().QueryOutput.unwrap())(encoder, &mut data)
+    };
+
+    match result {
+        AMF_RESULT_AMF_OK => Ok(data),
+        _ => Err(result),
+    }
+}

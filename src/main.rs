@@ -124,34 +124,54 @@ fn main() -> std::io::Result<()> {
     let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
 
     while submitted < frameCount {
-        unsafe{
-if surfaceIn.is_null() {
-                //surfaceIn = std::ptr::null_mut();
-                res = (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, memoryTypeIn, formatIn, widthIn, heightIn, &mut surfaceIn);
-                println!("AllocSurface() result: {:?}", res);
-                FillSurfaceDX11(context as *mut AMFContext, surfaceIn)?;
+        if surfaceIn.is_null() {
+            let result = alloc_surface(
+                context,
+                memoryTypeIn,
+                formatIn,
+                widthIn,
+                heightIn,
+            );
+            match result {
+                Ok(surface) => {
+                    println!("AllocSurface() result: {:?}", AMF_RESULT_AMF_OK);
+                    surfaceIn = surface;
+                    FillSurfaceDX11(context, surfaceIn)?;
+                }
+                Err(err) => {
+                    println!("AllocSurface() failed with error: {:?}", err);
+                    break;
+                }
             }
-            res = (*encoder).pVtbl.as_ref().unwrap().SubmitInput.unwrap()(encoder, surfaceIn as *mut AMFData);
-            if res != AMF_RESULT_AMF_INPUT_FULL {
-                (*surfaceIn).pVtbl.as_ref().unwrap().Release.unwrap()(surfaceIn);
-                surfaceIn = std::ptr::null_mut();
-                assert_eq!(res, AMF_RESULT_AMF_OK, "SubmitInput() failed");
-                submitted += 1;
+        }
+        let submit_result = submit_input(encoder, surfaceIn);
+        if submit_result.is_ok() {
+            release(surfaceIn);
+            surfaceIn = std::ptr::null_mut();
+            assert_eq!(submit_result.unwrap(), (), "SubmitInput() failed");
+            submitted += 1;
+        }
+        let query_result = query_output(encoder);
+        match query_result {
+            Ok(data) => {
+                if !data.is_null() {
+                unsafe{
+                    let mut buffer: *mut AMFBuffer = std::ptr::null_mut();
+                    let guid = IID_AMFBuffer();
+                    (*data).pVtbl.as_ref().unwrap().QueryInterface.unwrap()(data, &guid, &mut buffer as *mut _ as *mut *mut c_void);
+                    let native_buffer = (*buffer).pVtbl.as_ref().unwrap().GetNative.unwrap()(buffer);
+                    let buffer_size = (*buffer).pVtbl.as_ref().unwrap().GetSize.unwrap()(buffer);
+                    file.write_all(std::slice::from_raw_parts(native_buffer as *const u8, buffer_size as usize)).unwrap();
+                    (*buffer).pVtbl.as_ref().unwrap().Release.unwrap()(buffer);
+                    (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
+                }
+                }
             }
-            let mut data: *mut AMFData = std::ptr::null_mut();
-            res = (*encoder).pVtbl.as_ref().unwrap().QueryOutput.unwrap()(encoder, &mut data);
-            if res == AMF_RESULT_AMF_EOF {
+            Err(AMF_RESULT_AMF_EOF) => {
                 break; // Drain complete
             }
-            if !data.is_null() {
-                let mut buffer: *mut AMFBuffer = std::ptr::null_mut();
-                let guid = IID_AMFBuffer();
-                (*data).pVtbl.as_ref().unwrap().QueryInterface.unwrap()(data, &guid, &mut buffer as *mut _ as *mut *mut c_void);
-                let native_buffer = (*buffer).pVtbl.as_ref().unwrap().GetNative.unwrap()(buffer);
-                let buffer_size = (*buffer).pVtbl.as_ref().unwrap().GetSize.unwrap()(buffer);
-                file.write_all(std::slice::from_raw_parts(native_buffer as *const u8, buffer_size as usize)).unwrap();
-                (*buffer).pVtbl.as_ref().unwrap().Release.unwrap()(buffer);
-                (*data).pVtbl.as_ref().unwrap().Release.unwrap()(data);
+            Err(err) => {
+                // Handle other errors if necessary
             }
         }
     }
