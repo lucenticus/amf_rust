@@ -48,7 +48,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
 static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
 
@@ -199,6 +198,7 @@ fn AMFConstructRate(num: u32, den: u32) -> AMFRate {
     AMFRate { num, den }
 }
 
+
 fn PrepareFillDX11(context: *mut AMFContext) {
     let mut res = unsafe { (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, AMF_MEMORY_TYPE_AMF_MEMORY_HOST, formatIn, widthIn, heightIn, &mut pColor1) };
     println!("AllocSurface result: {:?}", res);
@@ -207,34 +207,30 @@ fn PrepareFillDX11(context: *mut AMFContext) {
     unsafe {
         FillNV12SurfaceWithColor(pColor2, 128, 0, 128);
         FillNV12SurfaceWithColor(pColor1, 128, 255, 128);
-        (*pColor1).pVtbl.as_ref().unwrap().Convert.unwrap()(pColor1, memoryTypeIn);
-        (*pColor2).pVtbl.as_ref().unwrap().Convert.unwrap()(pColor2, memoryTypeIn);
+        convert_surface(pColor1, memoryTypeIn);
+        convert_surface(pColor2, memoryTypeIn);
     }
 }
 
 fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
-    unsafe {
-        let plane_y = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
-        let plane_uv = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 1);
-
-        let width_y = (*plane_y).pVtbl.as_ref().unwrap().GetWidth.unwrap()(plane_y);
-        let height_y = (*plane_y).pVtbl.as_ref().unwrap().GetHeight.unwrap()(plane_y);
-        let line_y = (*plane_y).pVtbl.as_ref().unwrap().GetHPitch.unwrap()(plane_y);
-
-        let data_y = (*plane_y).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane_y) as *mut u8;
-
-        for y in 0..height_y {
+    let plane_y = get_plane_at(surface, 0).expect("Failed to get plane Y");
+    let plane_uv = get_plane_at(surface, 1).expect("Failed to get plane UV");
+    let width_y = get_width(plane_y);
+    let height_y = get_height(plane_y);
+    let line_y = get_h_pitch(plane_y);
+    let data_y = get_native_plane(plane_y);
+    for y in 0..height_y {
+        unsafe {
             let data_line = data_y.add(y as usize * line_y as usize);
             std::ptr::write_bytes(data_line, Y, width_y as usize);
         }
-
-        let width_uv = (*plane_uv).pVtbl.as_ref().unwrap().GetWidth.unwrap()(plane_uv);
-        let height_uv = (*plane_uv).pVtbl.as_ref().unwrap().GetHeight.unwrap()(plane_uv);
-        let line_uv = (*plane_uv).pVtbl.as_ref().unwrap().GetHPitch.unwrap()(plane_uv);
-
-        let data_uv =(*plane_uv).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane_uv) as *mut u8;
-
-        for y in 0..height_uv {
+    }
+    let width_uv = get_width(plane_uv);
+    let height_uv = get_height(plane_uv);
+    let line_uv = get_h_pitch(plane_uv);
+    let data_uv = get_native_plane(plane_uv);
+    for y in 0..height_uv {
+        unsafe {
             let data_line = data_uv.add(y as usize * line_uv as usize);
             for x in 0..width_uv {
                 std::ptr::write(data_line.add(x as usize * 2), U);
@@ -243,6 +239,7 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
         }
     }
 }
+
 
 fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result<(), std::io::Error> {
     let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();

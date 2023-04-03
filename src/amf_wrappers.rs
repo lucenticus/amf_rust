@@ -271,3 +271,42 @@ pub fn IID_AMFBuffer() -> AMFGuid {
         data48: 0xcb,
     }
 }
+
+
+pub fn get_plane_at(surface: *mut AMFSurface, index: usize) -> Result<*mut AMFPlane, &'static str> {
+    if surface.is_null() {
+        return Err("Surface is null");
+    }
+    unsafe {
+        let plane = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, index);
+        Ok(plane)
+    }
+}
+
+pub fn get_width(plane: *mut AMFPlane) -> i32 {
+    unsafe {
+        (*plane).pVtbl.as_ref().unwrap().GetWidth.unwrap()(plane)
+    }
+}
+
+pub fn get_height(plane: *mut AMFPlane) -> i32 {
+    unsafe {
+        (*plane).pVtbl.as_ref().unwrap().GetHeight.unwrap()(plane)
+    }
+}
+
+pub fn get_h_pitch(plane: *mut AMFPlane) -> i32 {
+    unsafe {
+        (*plane).pVtbl.as_ref().unwrap().GetHPitch.unwrap()(plane)
+    }
+}
+
+pub fn get_native_plane(plane: *mut AMFPlane) -> *mut u8 {
+    unsafe {
+        (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut u8
+    }
+}
+
+pub fn convert_surface(surface: *mut AMFSurface, memoryTypeIn: AMF_MEMORY_TYPE) -> i32 {
+    unsafe { (*surface).pVtbl.as_ref().unwrap().Convert.unwrap()(surface, memoryTypeIn) }
+}
