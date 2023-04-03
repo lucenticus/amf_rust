@@ -47,6 +47,8 @@ use amf_wrappers::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
 static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
@@ -167,6 +169,10 @@ fn main() -> std::io::Result<()> {
             }
             Err(AMF_RESULT_AMF_EOF) => {
                 break; // Drain complete
+            }
+            Err(AMF_RESULT_AMF_REPEAT) => {
+                println!("Waiting SubmitInput(), will repeat after sleep");
+                thread::sleep(Duration::from_millis(5));
             }
             Err(err) => {
                 println!("QueryOutput() failed with error: {:?}", err);
