@@ -1,7 +1,3 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-#[allow(dead_code)]
 //
 // Notice Regarding Standards.  AMD does not provide a license or sublicense to
 // any Intellectual Property Rights relating to any standards, including but not
@@ -36,6 +32,11 @@
 //
 
 // this sample encodes NV12 frames using AMF Encoder and writes them to H.264 elmentary stream
+
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+#[allow(dead_code)]
 mod amf_bindings;
 use amf_bindings::*;
 mod amf_wrappers;
@@ -61,9 +62,6 @@ static frameCount: amf_int32 = 500;
 static mut xPos: amf_int32 = 0;
 static mut yPos: amf_int32 = 0;
 
-static mut pColor1: *mut AMFSurface = std::ptr::null_mut();
-static mut pColor2: *mut AMFSurface = std::ptr::null_mut();
-
 fn main() -> std::io::Result<()> {
     amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
     println!("AMFFactoryHelper_Init succeeded");
@@ -85,8 +83,9 @@ fn main() -> std::io::Result<()> {
     if res_init_dx11 != AMF_RESULT_AMF_OK {
         panic!("InitDX11 failed");
     }
-
-    PrepareFillDX11(context);
+    let mut pColor1: *mut AMFSurface = std::ptr::null_mut();
+    let mut pColor2: *mut AMFSurface = std::ptr::null_mut();
+    PrepareFillDX11(context, &mut pColor1, &mut pColor2);
 
     let (res_create_component, mut encoder) =
         create_component(factory, context, "AMFVideoEncoderVCE_AVC");
@@ -129,7 +128,7 @@ fn main() -> std::io::Result<()> {
                 Ok(surface) => {
                     println!("AllocSurface() result: {:?}", AMF_RESULT_AMF_OK);
                     surfaceIn = surface;
-                    FillSurfaceDX11(context, surfaceIn)?;
+                    FillSurfaceDX11(context, surfaceIn, &mut pColor1, &mut pColor2)?;
                 }
                 Err(err) => {
                     println!("AllocSurface() failed with error: {:?}", err);
@@ -200,7 +199,9 @@ fn AMFConstructRate(num: u32, den: u32) -> AMFRate {
 }
 
 fn PrepareFillDX11(
-    context: *mut AMFContext
+    context: *mut AMFContext,
+    pColor1: &mut *mut AMFSurface,
+    pColor2: &mut *mut AMFSurface,
 ) {
     let result = alloc_surface(
         context,
@@ -212,7 +213,7 @@ fn PrepareFillDX11(
     match result {
         Ok(surface) => {
             println!("AllocSurface() result for pColor1: {:?}", AMF_RESULT_AMF_OK);
-            unsafe {pColor1 = surface;}
+            *pColor1 = surface;
         }
         Err(err) => {
             println!("AllocSurface() for pColor1 failed with error: {:?}", err);
@@ -229,18 +230,16 @@ fn PrepareFillDX11(
     match result {
         Ok(surface) => {
             println!("AllocSurface() result for pColor2: {:?}", AMF_RESULT_AMF_OK);
-            unsafe { pColor2 = surface; }
+            *pColor2 = surface;
         }
         Err(err) => {
             println!("AllocSurface() for pColor2 failed with error: {:?}", err);
         }
     }
-    unsafe {
-        FillNV12SurfaceWithColor(pColor2, 128, 0, 128);
-        FillNV12SurfaceWithColor(pColor1, 128, 255, 128);
-        convert_surface(pColor1, memoryTypeIn);
-        convert_surface(pColor2, memoryTypeIn);
-    }
+    FillNV12SurfaceWithColor(*pColor2, 128, 0, 128);
+    FillNV12SurfaceWithColor(*pColor1, 128, 255, 128);
+    convert_surface(*pColor1, memoryTypeIn);
+    convert_surface(*pColor2, memoryTypeIn);
 }
 
 fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
@@ -271,7 +270,12 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
     }
 }
 
-fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result<(), std::io::Error> {
+fn FillSurfaceDX11(
+    context: *mut AMFContext,
+    surface: *mut AMFSurface,
+    pColor1: &mut *mut AMFSurface,
+    pColor2: &mut *mut AMFSurface,
+) -> Result<(), std::io::Error> {
     let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
 
     unsafe {
@@ -294,7 +298,7 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
 
         // Fill the surface with color1
         let planeColor1: *mut AMFPlane =
-            (*pColor1).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor1, 0);
+            (*(*pColor1)).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(*pColor1, 0);
         let surface_dx11_color1: *mut ID3D11Texture2D =
             (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1)
                 as *mut ID3D11Texture2D;
@@ -327,7 +331,7 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
         };
 
         let planeColor2: *mut AMFPlane =
-            (*pColor2).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor2, 0);
+            (*(*pColor2)).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(*pColor2, 0);
         let surface_dx11_color2: *mut ID3D11Texture2D =
             (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2)
                 as *mut ID3D11Texture2D;
