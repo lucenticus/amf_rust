@@ -2,7 +2,6 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #[allow(dead_code)]
-
 //
 // Notice Regarding Standards.  AMD does not provide a license or sublicense to
 // any Intellectual Property Rights relating to any standards, including but not
@@ -37,7 +36,6 @@
 //
 
 // this sample encodes NV12 frames using AMF Encoder and writes them to H.264 elmentary stream
-
 mod amf_bindings;
 use amf_bindings::*;
 mod amf_wrappers;
@@ -87,13 +85,11 @@ fn main() -> std::io::Result<()> {
     if res_init_dx11 != AMF_RESULT_AMF_OK {
         panic!("InitDX11 failed");
     }
+
     PrepareFillDX11(context);
 
-    let (res_create_component, mut encoder) = create_component(
-        factory,
-        context,
-        "AMFVideoEncoderVCE_AVC",
-    );
+    let (res_create_component, mut encoder) =
+        create_component(factory, context, "AMFVideoEncoderVCE_AVC");
 
     println!("CreateComponent result: {:?}", res_create_component);
     if res_create_component != AMF_RESULT_AMF_OK {
@@ -103,7 +99,12 @@ fn main() -> std::io::Result<()> {
     let size: AMFSize = AMFConstructSize(widthIn, heightIn);
     let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
     let usage = "Usage";
-    AMFAssignPropertyInt64(&mut res, encoder, usage, AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64);
+    AMFAssignPropertyInt64(
+        &mut res,
+        encoder,
+        usage,
+        AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64,
+    );
     println!("AMFAssignPropertyInt64 usage result: {:?}", res);
     let bitrate = "TargetBitrate";
     AMFAssignPropertyInt64(&mut res, encoder, bitrate, bitRateIn);
@@ -123,13 +124,7 @@ fn main() -> std::io::Result<()> {
 
     while submitted < frameCount {
         if surfaceIn.is_null() {
-            let result = alloc_surface(
-                context,
-                memoryTypeIn,
-                formatIn,
-                widthIn,
-                heightIn,
-            );
+            let result = alloc_surface(context, memoryTypeIn, formatIn, widthIn, heightIn);
             match result {
                 Ok(surface) => {
                     println!("AllocSurface() result: {:?}", AMF_RESULT_AMF_OK);
@@ -204,12 +199,42 @@ fn AMFConstructRate(num: u32, den: u32) -> AMFRate {
     AMFRate { num, den }
 }
 
+fn PrepareFillDX11(
+    context: *mut AMFContext
+) {
+    let result = alloc_surface(
+        context,
+        AMF_MEMORY_TYPE_AMF_MEMORY_HOST,
+        formatIn,
+        widthIn,
+        heightIn,
+    );
+    match result {
+        Ok(surface) => {
+            println!("AllocSurface() result for pColor1: {:?}", AMF_RESULT_AMF_OK);
+            unsafe {pColor1 = surface;}
+        }
+        Err(err) => {
+            println!("AllocSurface() for pColor1 failed with error: {:?}", err);
+        }
+    }
 
-fn PrepareFillDX11(context: *mut AMFContext) {
-    let mut res = unsafe { (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, AMF_MEMORY_TYPE_AMF_MEMORY_HOST, formatIn, widthIn, heightIn, &mut pColor1) };
-    println!("AllocSurface result: {:?}", res);
-    res = unsafe { (*context).pVtbl.as_ref().unwrap().AllocSurface.unwrap()(context, AMF_MEMORY_TYPE_AMF_MEMORY_HOST, formatIn, rectSize, rectSize, &mut pColor2) };
-    println!("AllocSurface result: {:?}", res);
+    let result = alloc_surface(
+        context,
+        AMF_MEMORY_TYPE_AMF_MEMORY_HOST,
+        formatIn,
+        rectSize,
+        rectSize,
+    );
+    match result {
+        Ok(surface) => {
+            println!("AllocSurface() result for pColor2: {:?}", AMF_RESULT_AMF_OK);
+            unsafe { pColor2 = surface; }
+        }
+        Err(err) => {
+            println!("AllocSurface() for pColor2 failed with error: {:?}", err);
+        }
+    }
     unsafe {
         FillNV12SurfaceWithColor(pColor2, 128, 0, 128);
         FillNV12SurfaceWithColor(pColor1, 128, 255, 128);
@@ -246,22 +271,39 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
     }
 }
 
-
 fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result<(), std::io::Error> {
     let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
 
     unsafe {
         // Get native DX objects
-        let device_dx11: *mut ID3D11Device = (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(context, AMF_DX_VERSION_AMF_DX11_0) as *mut ID3D11Device;
-        let plane: *mut AMFPlane  = (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
-        let surface_dx11: *mut ID3D11Texture2D = (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
-        (*device_dx11).lpVtbl.as_ref().unwrap().GetImmediateContext.unwrap()(device_dx11, &mut device_context_dx11);
-
+        let device_dx11: *mut ID3D11Device =
+            (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(
+                context,
+                AMF_DX_VERSION_AMF_DX11_0,
+            ) as *mut ID3D11Device;
+        let plane: *mut AMFPlane =
+            (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
+        let surface_dx11: *mut ID3D11Texture2D =
+            (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
+        (*device_dx11)
+            .lpVtbl
+            .as_ref()
+            .unwrap()
+            .GetImmediateContext
+            .unwrap()(device_dx11, &mut device_context_dx11);
 
         // Fill the surface with color1
-        let planeColor1:*mut AMFPlane  = (*pColor1).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor1, 0);
-        let surface_dx11_color1: *mut ID3D11Texture2D = (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1) as *mut ID3D11Texture2D;
-        (*device_context_dx11).lpVtbl.as_ref().unwrap().CopyResource.unwrap()(
+        let planeColor1: *mut AMFPlane =
+            (*pColor1).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor1, 0);
+        let surface_dx11_color1: *mut ID3D11Texture2D =
+            (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1)
+                as *mut ID3D11Texture2D;
+        (*device_context_dx11)
+            .lpVtbl
+            .as_ref()
+            .unwrap()
+            .CopyResource
+            .unwrap()(
             device_context_dx11,
             surface_dx11 as *mut ID3D11Resource,
             surface_dx11_color1 as *mut ID3D11Resource,
@@ -284,9 +326,17 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
             back: 1,
         };
 
-        let planeColor2:*mut AMFPlane  = (*pColor2).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor2, 0);
-        let surface_dx11_color2: *mut ID3D11Texture2D = (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2) as *mut ID3D11Texture2D;
-        (*device_context_dx11).lpVtbl.as_ref().unwrap().CopySubresourceRegion.unwrap()(
+        let planeColor2: *mut AMFPlane =
+            (*pColor2).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(pColor2, 0);
+        let surface_dx11_color2: *mut ID3D11Texture2D =
+            (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2)
+                as *mut ID3D11Texture2D;
+        (*device_context_dx11)
+            .lpVtbl
+            .as_ref()
+            .unwrap()
+            .CopySubresourceRegion
+            .unwrap()(
             device_context_dx11,
             surface_dx11 as *mut ID3D11Resource,
             0,
@@ -295,18 +345,27 @@ fn FillSurfaceDX11(context: *mut AMFContext, surface: *mut AMFSurface) -> Result
             0,
             surface_dx11_color2 as *mut ID3D11Resource,
             0,
-            & rect,
+            &rect,
         );
 
-
-        (*device_context_dx11).lpVtbl.as_ref().unwrap().Flush.unwrap()(device_context_dx11);
+        (*device_context_dx11)
+            .lpVtbl
+            .as_ref()
+            .unwrap()
+            .Flush
+            .unwrap()(device_context_dx11);
 
         // Update x_pos and y_pos
         xPos += 2;
         yPos += 2;
 
         // Release device context
-        (*device_context_dx11).lpVtbl.as_ref().unwrap().Release.unwrap()(device_context_dx11);
+        (*device_context_dx11)
+            .lpVtbl
+            .as_ref()
+            .unwrap()
+            .Release
+            .unwrap()(device_context_dx11);
     }
 
     Ok(())
