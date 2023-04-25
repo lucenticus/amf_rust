@@ -38,6 +38,9 @@
 #![allow(non_snake_case)]
 #[allow(dead_code)]
 mod amf_bindings;
+use winapi::um::d3d11::{
+    ID3D11Resource, ID3D11Texture2D,
+};
 use amf_bindings::*;
 mod amf_wrappers;
 
@@ -48,9 +51,6 @@ use std::io::Write;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use winapi::um::d3d11::{
-    ID3D11Device, ID3D11DeviceContext, ID3D11Resource, ID3D11Texture2D,
-};
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
 static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
@@ -77,7 +77,7 @@ fn main() -> std::io::Result<()> {
     println!("AMFTraceSetWriterLevel result: {:?}", previous_level);
 
     let factory = get_amf_factory().expect("Failed to get AMF factory");
-    let mut context = create_amf_context(factory).expect("Failed to create AMF context");
+    let context = create_amf_context(factory).expect("Failed to create AMF context");
     let res_init_dx11 = init_dx11(context);
     println!("InitDX11 result: {:?}", res_init_dx11);
     if res_init_dx11 != AMF_RESULT_AMF_OK {
@@ -87,7 +87,7 @@ fn main() -> std::io::Result<()> {
     let mut pColor2: *mut AMFSurface = std::ptr::null_mut();
     PrepareFillDX11(context, &mut pColor1, &mut pColor2);
 
-    let (res_create_component, mut encoder) =
+    let (res_create_component, encoder) =
         create_component(factory, context, "AMFVideoEncoderVCE_AVC");
 
     println!("CreateComponent result: {:?}", res_create_component);
@@ -185,10 +185,8 @@ fn main() -> std::io::Result<()> {
     }
     terminate_encoder(encoder);
     release_encoder(encoder);
-    encoder = std::ptr::null_mut();
     terminate_context(context);
     release_context(context);
-    context = std::ptr::null_mut();
     amf_factory_helper_terminate();
     Ok(())
 }
@@ -281,31 +279,22 @@ fn FillSurfaceDX11(
     xPos: &mut amf_int32,
     yPos: &mut amf_int32,
 ) -> Result<(), std::io::Error> {
-    let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
-
-    // Get native DX objects
-    let device_dx11 = unsafe {(*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(
-        context,
-        AMF_DX_VERSION_AMF_DX11_0,
-    ) as *mut ID3D11Device};
-
-    //let device_dx11 = device_dx11.query_interface::<ID3D11Device>().unwrap();
+    let device_dx11 = get_dx11_device(context);
 
     let plane = get_plane_at(surface, 0).expect("Failed to get plane");
     let surface_dx11 = get_native_plane(plane);
-    unsafe {
-        (*device_dx11).GetImmediateContext(&mut device_context_dx11);
-    }
+
+    let device_context_dx11 = get_immediate_context(device_dx11);
+
     // Fill the surface with color1
     let plane_color1 = get_plane_at(*p_color1, 0).expect("Failed to get plane plane_color1");
     let surface_dx11_color1 = get_native_plane(plane_color1) as *mut ID3D11Texture2D;
 
-    unsafe {
-        (*device_context_dx11).CopyResource(
-            surface_dx11.cast::<ID3D11Resource>(),
-            surface_dx11_color1.cast::<ID3D11Resource>(),
-        );
-    }
+    copy_resource(
+        device_context_dx11,
+        surface_dx11_color1.cast::<ID3D11Resource>(),
+        surface_dx11.cast::<ID3D11Resource>(),
+    );
 
     if *xPos + rectSize > widthIn {
         *xPos = 0;
@@ -326,27 +315,29 @@ fn FillSurfaceDX11(
 
     let plane_color2 = get_plane_at(*p_color2, 0).expect("Failed to get plane plane_color2");
     let surface_dx11_color2 = get_native_plane(plane_color2) as *mut ID3D11Texture2D;
-    unsafe {
-        (*device_context_dx11).CopySubresourceRegion(
-            surface_dx11.cast::<ID3D11Resource>(),
-            0,
-            *xPos as u32,
-            *yPos as u32,
-            0,
-            surface_dx11_color2.cast::<ID3D11Resource>(),
-            0,
-            &rect,
-        );
 
-        (*device_context_dx11).Flush();
-    }
+    copy_subresource_region(
+        device_context_dx11,
+        surface_dx11.cast::<ID3D11Resource>(),
+        0,
+        *xPos as u32,
+        *yPos as u32,
+        0,
+        surface_dx11_color2.cast::<ID3D11Resource>(),
+        0,
+        &rect,
+    );
+
+    flush(device_context_dx11);
 
     // Update xPos and yPos
     *xPos += 2;
     *yPos += 2;
 
     // Release device context
-    unsafe { (*device_context_dx11).Release() };
+    release_device_context_dx11(device_context_dx11);
 
     Ok(())
 }
+
+
