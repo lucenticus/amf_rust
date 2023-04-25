@@ -9,6 +9,7 @@ use widestring::U16CString;
 
 use std::fs::File;
 use std::io::Write;
+use winapi::um::d3d11::{ID3D11Device, ID3D11DeviceContext, ID3D11Resource, ID3D11Texture2D, D3D11_BOX};
 
 pub fn amf_trace_enable_writer(writer_name: &str, enable: bool) -> amf_bool {
     let writer_cstring = U16CString::from_str(writer_name).unwrap();
@@ -345,19 +346,19 @@ pub fn convert_surface(surface: *mut AMFSurface, memoryTypeIn: AMF_MEMORY_TYPE) 
     unsafe { (*surface).pVtbl.as_ref().unwrap().Convert.unwrap()(surface, memoryTypeIn) }
 }
 
-pub fn get_dx11_device(context: *mut AMFContext) -> *mut winapi::um::d3d11::ID3D11Device {
+pub fn get_dx11_device(context: *mut AMFContext) -> *mut ID3D11Device {
     unsafe {
         (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(
             context,
             AMF_DX_VERSION_AMF_DX11_0,
-        ) as *mut winapi::um::d3d11::ID3D11Device
+        ) as *mut ID3D11Device
     }
 }
 
 pub fn get_immediate_context(
-    device_dx11: *mut winapi::um::d3d11::ID3D11Device,
-) -> *mut winapi::um::d3d11::ID3D11DeviceContext {
-    let mut device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext = std::ptr::null_mut();
+    device_dx11: *mut ID3D11Device,
+) -> *mut ID3D11DeviceContext {
+    let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
     unsafe {
         (*device_dx11).GetImmediateContext(&mut device_context_dx11);
     }
@@ -365,9 +366,9 @@ pub fn get_immediate_context(
 }
 
 pub fn copy_resource(
-    device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext,
-    src: *mut winapi::um::d3d11::ID3D11Resource,
-    dest: *mut winapi::um::d3d11::ID3D11Resource,
+    device_context_dx11: *mut ID3D11DeviceContext,
+    src: *mut ID3D11Resource,
+    dest: *mut ID3D11Resource,
 ) {
     unsafe {
         (*device_context_dx11).CopyResource(dest, src);
@@ -375,15 +376,15 @@ pub fn copy_resource(
 }
 
 pub fn copy_subresource_region(
-    device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext,
-    dest: *mut winapi::um::d3d11::ID3D11Resource,
+    device_context_dx11: *mut ID3D11DeviceContext,
+    dest: *mut ID3D11Resource,
     dest_subresource: u32,
     dest_x: u32,
     dest_y: u32,
     dest_z: u32,
-    src: *mut winapi::um::d3d11::ID3D11Resource,
+    src: *mut ID3D11Resource,
     src_subresource: u32,
-    src_box: &winapi::um::d3d11::D3D11_BOX,
+    src_box: &D3D11_BOX,
 ) {
     unsafe {
         (*device_context_dx11).CopySubresourceRegion(
@@ -399,14 +400,14 @@ pub fn copy_subresource_region(
     }
 }
 
-pub fn flush_device_context(device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext) {
+pub fn flush_device_context(device_context_dx11: *mut ID3D11DeviceContext) {
     unsafe {
         (*device_context_dx11).Flush();
     }
 }
 
 pub fn release_device_context_dx11(
-    device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext,
+    device_context_dx11: *mut ID3D11DeviceContext,
 ) {
     unsafe {
         (*device_context_dx11).Release();
