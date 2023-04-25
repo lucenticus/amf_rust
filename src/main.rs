@@ -48,6 +48,9 @@ use std::io::Write;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
+use winapi::um::d3d11::{
+    ID3D11Device, ID3D11DeviceContext, ID3D11Resource, ID3D11Texture2D,
+};
 
 static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
 static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
@@ -58,9 +61,6 @@ static frameRateIn: amf_int32 = 30;
 static bitRateIn: amf_int64 = 5000000i64;
 static rectSize: amf_int32 = 50;
 static frameCount: amf_int32 = 500;
-
-static mut xPos: amf_int32 = 0;
-static mut yPos: amf_int32 = 0;
 
 fn main() -> std::io::Result<()> {
     amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
@@ -121,6 +121,9 @@ fn main() -> std::io::Result<()> {
     let mut file = File::create(Path::new("./output.mp4"))?;
     let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
 
+    let mut xPos: amf_int32 = 0;
+    let mut yPos: amf_int32 = 0;
+
     while submitted < frameCount {
         if surfaceIn.is_null() {
             let result = alloc_surface(context, memoryTypeIn, formatIn, widthIn, heightIn);
@@ -128,7 +131,7 @@ fn main() -> std::io::Result<()> {
                 Ok(surface) => {
                     println!("AllocSurface() result: {:?}", AMF_RESULT_AMF_OK);
                     surfaceIn = surface;
-                    FillSurfaceDX11(context, surfaceIn, &mut pColor1, &mut pColor2)?;
+                    FillSurfaceDX11(context, surfaceIn, &mut pColor1, &mut pColor2, &mut xPos, &mut yPos)?;
                 }
                 Err(err) => {
                     println!("AllocSurface() failed with error: {:?}", err);
@@ -273,104 +276,77 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
 fn FillSurfaceDX11(
     context: *mut AMFContext,
     surface: *mut AMFSurface,
-    pColor1: &mut *mut AMFSurface,
-    pColor2: &mut *mut AMFSurface,
+    p_color1: &mut *mut AMFSurface,
+    p_color2: &mut *mut AMFSurface,
+    xPos: &mut amf_int32,
+    yPos: &mut amf_int32,
 ) -> Result<(), std::io::Error> {
     let mut device_context_dx11: *mut ID3D11DeviceContext = std::ptr::null_mut();
 
+    // Get native DX objects
+    let device_dx11 = unsafe {(*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(
+        context,
+        AMF_DX_VERSION_AMF_DX11_0,
+    ) as *mut ID3D11Device};
+
+    //let device_dx11 = device_dx11.query_interface::<ID3D11Device>().unwrap();
+
+    let plane = get_plane_at(surface, 0).expect("Failed to get plane");
+    let surface_dx11 = get_native_plane(plane);
     unsafe {
-        // Get native DX objects
-        let device_dx11: *mut ID3D11Device =
-            (*context).pVtbl.as_ref().unwrap().GetDX11Device.unwrap()(
-                context,
-                AMF_DX_VERSION_AMF_DX11_0,
-            ) as *mut ID3D11Device;
-        let plane: *mut AMFPlane =
-            (*surface).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(surface, 0);
-        let surface_dx11: *mut ID3D11Texture2D =
-            (*plane).pVtbl.as_ref().unwrap().GetNative.unwrap()(plane) as *mut ID3D11Texture2D;
-        (*device_dx11)
-            .lpVtbl
-            .as_ref()
-            .unwrap()
-            .GetImmediateContext
-            .unwrap()(device_dx11, &mut device_context_dx11);
+        (*device_dx11).GetImmediateContext(&mut device_context_dx11);
+    }
+    // Fill the surface with color1
+    let plane_color1 = get_plane_at(*p_color1, 0).expect("Failed to get plane plane_color1");
+    let surface_dx11_color1 = get_native_plane(plane_color1) as *mut ID3D11Texture2D;
 
-        // Fill the surface with color1
-        let planeColor1: *mut AMFPlane =
-            (*(*pColor1)).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(*pColor1, 0);
-        let surface_dx11_color1: *mut ID3D11Texture2D =
-            (*planeColor1).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor1)
-                as *mut ID3D11Texture2D;
-        (*device_context_dx11)
-            .lpVtbl
-            .as_ref()
-            .unwrap()
-            .CopyResource
-            .unwrap()(
-            device_context_dx11,
-            surface_dx11 as *mut ID3D11Resource,
-            surface_dx11_color1 as *mut ID3D11Resource,
+    unsafe {
+        (*device_context_dx11).CopyResource(
+            surface_dx11.cast::<ID3D11Resource>(),
+            surface_dx11_color1.cast::<ID3D11Resource>(),
         );
+    }
 
-        if xPos + rectSize > widthIn {
-            xPos = 0;
-        }
-        if yPos + rectSize > heightIn {
-            yPos = 0;
-        }
+    if *xPos + rectSize > widthIn {
+        *xPos = 0;
+    }
+    if *yPos + rectSize > heightIn {
+        *yPos = 0;
+    }
 
-        // Fill the surface with color2
-        let rect = D3D11_BOX {
-            left: 0,
-            top: 0,
-            front: 0,
-            right: rectSize as u32,
-            bottom: rectSize as u32,
-            back: 1,
-        };
+    // Fill the surface with color2
+    let rect = winapi::um::d3d11::D3D11_BOX {
+        left: 0,
+        top: 0,
+        front: 0,
+        right: rectSize as u32,
+        bottom: rectSize as u32,
+        back: 1,
+    };
 
-        let planeColor2: *mut AMFPlane =
-            (*(*pColor2)).pVtbl.as_ref().unwrap().GetPlaneAt.unwrap()(*pColor2, 0);
-        let surface_dx11_color2: *mut ID3D11Texture2D =
-            (*planeColor2).pVtbl.as_ref().unwrap().GetNative.unwrap()(planeColor2)
-                as *mut ID3D11Texture2D;
-        (*device_context_dx11)
-            .lpVtbl
-            .as_ref()
-            .unwrap()
-            .CopySubresourceRegion
-            .unwrap()(
-            device_context_dx11,
-            surface_dx11 as *mut ID3D11Resource,
+    let plane_color2 = get_plane_at(*p_color2, 0).expect("Failed to get plane plane_color2");
+    let surface_dx11_color2 = get_native_plane(plane_color2) as *mut ID3D11Texture2D;
+    unsafe {
+        (*device_context_dx11).CopySubresourceRegion(
+            surface_dx11.cast::<ID3D11Resource>(),
             0,
-            xPos as u32,
-            yPos as u32,
+            *xPos as u32,
+            *yPos as u32,
             0,
-            surface_dx11_color2 as *mut ID3D11Resource,
+            surface_dx11_color2.cast::<ID3D11Resource>(),
             0,
             &rect,
         );
 
-        (*device_context_dx11)
-            .lpVtbl
-            .as_ref()
-            .unwrap()
-            .Flush
-            .unwrap()(device_context_dx11);
-
-        // Update x_pos and y_pos
-        xPos += 2;
-        yPos += 2;
-
-        // Release device context
-        (*device_context_dx11)
-            .lpVtbl
-            .as_ref()
-            .unwrap()
-            .Release
-            .unwrap()(device_context_dx11);
+        (*device_context_dx11).Flush();
     }
+
+    // Update xPos and yPos
+    *xPos += 2;
+    *yPos += 2;
+
+    // Release device context
+    unsafe { (*device_context_dx11).Release() };
 
     Ok(())
 }

@@ -14,3 +14,4 @@ cc = "1.0.79"
 cc = "1.0.79"
 libloading = "0.7.4"
 widestring = "1.0.2"
+winapi = { version = "0.3", features = ["d3d11", "d3dcommon"] }
