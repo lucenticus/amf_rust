@@ -399,7 +399,7 @@ pub fn copy_subresource_region(
     }
 }
 
-pub fn flush(device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext) {
+pub fn flush_device_context(device_context_dx11: *mut winapi::um::d3d11::ID3D11DeviceContext) {
     unsafe {
         (*device_context_dx11).Flush();
     }

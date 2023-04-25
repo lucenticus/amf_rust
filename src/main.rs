@@ -38,10 +38,8 @@
 #![allow(non_snake_case)]
 #[allow(dead_code)]
 mod amf_bindings;
-use winapi::um::d3d11::{
-    ID3D11Resource, ID3D11Texture2D,
-};
 use amf_bindings::*;
+use winapi::um::d3d11::{ID3D11Resource, ID3D11Texture2D};
 mod amf_wrappers;
 
 use amf_wrappers::*;
@@ -52,70 +50,58 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
-static memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
-static formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
+const memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
+const formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
 
-static widthIn: amf_int32 = 1920;
-static heightIn: amf_int32 = 1080;
-static frameRateIn: amf_int32 = 30;
-static bitRateIn: amf_int64 = 5000000i64;
-static rectSize: amf_int32 = 50;
-static frameCount: amf_int32 = 500;
+const widthIn: amf_int32 = 1920;
+const heightIn: amf_int32 = 1080;
+const bitRateIn: amf_int64 = 5000000i64;
+const rectSize: amf_int32 = 50;
+const frameCount: amf_int32 = 500;
 
 fn main() -> std::io::Result<()> {
     amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
     println!("AMFFactoryHelper_Init succeeded");
-    let level = AMF_TRACE_DEBUG as i32;
-    let previous_level = amf_trace_set_global_level(level);
-    println!("AMFTraceSetGlobalLevel result: {:?}", previous_level);
-    let console_str = "Console";
-    let mut is_ok = amf_trace_enable_writer(console_str, true);
-    println!("AMFTraceEnableWriter result: {:?}", is_ok);
-    is_ok = amf_trace_enable_writer("DebugOutput", true);
-    println!("AMFTraceEnableWriter result: {:?}", is_ok);
-    let previous_level = amf_trace_set_writer_level(console_str, level);
-    println!("AMFTraceSetWriterLevel result: {:?}", previous_level);
+
+    init_debug_output();
 
     let factory = get_amf_factory().expect("Failed to get AMF factory");
     let context = create_amf_context(factory).expect("Failed to create AMF context");
-    let res_init_dx11 = init_dx11(context);
-    println!("InitDX11 result: {:?}", res_init_dx11);
-    if res_init_dx11 != AMF_RESULT_AMF_OK {
-        panic!("InitDX11 failed");
+    let mut res = init_dx11(context);
+    if res != AMF_RESULT_AMF_OK {
+        panic!("InitDX11 failed with result: {:?}", res);
     }
     let mut pColor1: *mut AMFSurface = std::ptr::null_mut();
     let mut pColor2: *mut AMFSurface = std::ptr::null_mut();
     PrepareFillDX11(context, &mut pColor1, &mut pColor2);
 
-    let (res_create_component, encoder) =
+    let (res_encoder, encoder) =
         create_component(factory, context, "AMFVideoEncoderVCE_AVC");
 
-    println!("CreateComponent result: {:?}", res_create_component);
-    if res_create_component != AMF_RESULT_AMF_OK {
-        panic!("CreateComponent failed");
+    if res_encoder != AMF_RESULT_AMF_OK {
+        panic!("CreateComponent failed with result: {:?}", res_encoder);
     }
-    let mut res = AMF_RESULT_AMF_OK;
-    let size: AMFSize = AMFConstructSize(widthIn, heightIn);
-    let framerate: AMFRate = AMFConstructRate(frameRateIn.try_into().unwrap(), 1);
-    let usage = "Usage";
+
+    // Setting parameters for encoder
     AMFAssignPropertyInt64(
         &mut res,
         encoder,
-        usage,
+        "Usage",
         AMF_VIDEO_ENCODER_USAGE_ENUM_AMF_VIDEO_ENCODER_USAGE_TRANSCODING as i64,
     );
     println!("AMFAssignPropertyInt64 usage result: {:?}", res);
-    let bitrate = "TargetBitrate";
-    AMFAssignPropertyInt64(&mut res, encoder, bitrate, bitRateIn);
+
+    AMFAssignPropertyInt64(&mut res, encoder, "TargetBitrate", bitRateIn);
     println!("AMFAssignPropertyInt64 bitrate result: {:?}", res);
-    let frameSize = "FrameSize";
-    AMFAssignPropertySize(&mut res, encoder, frameSize, size);
+
+    let size: AMFSize = AMFSize { width: widthIn, height: heightIn };
+    AMFAssignPropertySize(&mut res, encoder, "FrameSize", size);
     println!("AMFAssignPropertySize frameSize result: {:?}", res);
 
-    let res_init_encoder = init_encoder(encoder, formatIn, widthIn, heightIn);
-    println!("Encoder Init() result: {:?}", res_init_encoder);
-    if res_init_encoder != AMF_RESULT_AMF_OK {
-        panic!("Encoder Init() failed");
+    res = init_encoder(encoder, formatIn, widthIn, heightIn);
+
+    if res != AMF_RESULT_AMF_OK {
+        panic!("Encoder Init() failed with result: {:?}", res);
     }
     let mut submitted = 0;
     let mut file = File::create(Path::new("./output.mp4"))?;
@@ -129,9 +115,15 @@ fn main() -> std::io::Result<()> {
             let result = alloc_surface(context, memoryTypeIn, formatIn, widthIn, heightIn);
             match result {
                 Ok(surface) => {
-                    println!("AllocSurface() result: {:?}", AMF_RESULT_AMF_OK);
                     surfaceIn = surface;
-                    FillSurfaceDX11(context, surfaceIn, &mut pColor1, &mut pColor2, &mut xPos, &mut yPos)?;
+                    FillSurfaceDX11(
+                        context,
+                        surfaceIn,
+                        &mut pColor1,
+                        &mut pColor2,
+                        &mut xPos,
+                        &mut yPos,
+                    )?;
                 }
                 Err(err) => {
                     println!("AllocSurface() failed with error: {:?}", err);
@@ -139,6 +131,7 @@ fn main() -> std::io::Result<()> {
                 }
             }
         }
+        // Submit the input surface into encoder
         let submit_result = submit_input(encoder, surfaceIn);
         if submit_result.is_ok() {
             release(surfaceIn);
@@ -146,6 +139,7 @@ fn main() -> std::io::Result<()> {
             assert_eq!(submit_result.unwrap(), (), "SubmitInput() failed");
             submitted += 1;
         }
+        // Receive output from encoder
         let query_result = query_output(encoder);
         match query_result {
             Ok(data) => {
@@ -191,12 +185,17 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn AMFConstructSize(width: i32, height: i32) -> AMFSize {
-    AMFSize { width, height }
-}
-
-fn AMFConstructRate(num: u32, den: u32) -> AMFRate {
-    AMFRate { num, den }
+fn init_debug_output() {
+    let level = AMF_TRACE_DEBUG as i32;
+    let previous_level = amf_trace_set_global_level(level);
+    println!("AMFTraceSetGlobalLevel result: {:?}", previous_level);
+    let console_str = "Console";
+    let mut is_ok = amf_trace_enable_writer(console_str, true);
+    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    is_ok = amf_trace_enable_writer("DebugOutput", true);
+    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    let previous_level = amf_trace_set_writer_level(console_str, level);
+    println!("AMFTraceSetWriterLevel result: {:?}", previous_level);
 }
 
 fn PrepareFillDX11(
@@ -328,7 +327,7 @@ fn FillSurfaceDX11(
         &rect,
     );
 
-    flush(device_context_dx11);
+    flush_device_context(device_context_dx11);
 
     // Update xPos and yPos
     *xPos += 2;
@@ -339,5 +338,3 @@ fn FillSurfaceDX11(
 
     Ok(())
 }
-
-
