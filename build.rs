@@ -5,6 +5,8 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
     cc::Build::new()
+        .warnings(false)
+        .extra_warnings(false)
         .file("./AMF/amf/public/samples/SamplesC/common/AMFFactoryC.c")
         .file("./AMF/amf/public/samples/SamplesC/common/ThreadWindowsC.c")
         .file("./AMF/amf/public/samples/SamplesC/common/TraceAdapterC.c")
