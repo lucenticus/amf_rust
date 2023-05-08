@@ -25,7 +25,7 @@ fn main() {
         .blocklist_type("LPTOP_LEVEL_EXCEPTION_FILTER")
         .blocklist_type("MONITORINFOEXA?W?")
         .blocklist_type("PEXCEPTION_FILTER")
-        .blocklist_type("PEXCEPTION_ROUTINE")
+        //.blocklist_type("PEXCEPTION_ROUTINE")
         .blocklist_type("PSLIST_HEADER")
         .blocklist_type("PTOP_LEVEL_EXCEPTION_FILTER")
         .blocklist_type("PVECTORED_EXCEPTION_HANDLER")
