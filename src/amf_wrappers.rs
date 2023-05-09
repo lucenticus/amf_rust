@@ -85,8 +85,8 @@ pub fn create_component(
 }
 
 #[inline]
-pub fn AMFVariantAssignSize(p_dest: &mut AMFVariantStruct, value: AMFSize) -> AMF_RESULT {
-    let err_ret = AMFVariantInit(p_dest);
+pub fn amf_variant_assign_size(p_dest: &mut AMFVariantStruct, value: AMFSize) -> AMF_RESULT {
+    let err_ret = amf_variant_init(p_dest);
     if err_ret == AMF_RESULT_AMF_OK {
         (*p_dest).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_SIZE;
         (*p_dest).__bindgen_anon_1.sizeValue = value;
@@ -95,8 +95,8 @@ pub fn AMFVariantAssignSize(p_dest: &mut AMFVariantStruct, value: AMFSize) -> AM
 }
 
 #[inline]
-pub fn AMFVariantAssignInt64(p_dest: &mut AMFVariantStruct, value: i64) -> AMF_RESULT {
-    let err_ret = AMFVariantInit(p_dest);
+pub fn amf_variant_assign_int64(p_dest: &mut AMFVariantStruct, value: i64) -> AMF_RESULT {
+    let err_ret = amf_variant_init(p_dest);
     if err_ret == AMF_RESULT_AMF_OK {
         (*p_dest).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_INT64;
         (*p_dest).__bindgen_anon_1.int64Value = value;
@@ -105,13 +105,13 @@ pub fn AMFVariantAssignInt64(p_dest: &mut AMFVariantStruct, value: i64) -> AMF_R
 }
 
 #[inline]
-pub fn AMFVariantInit(p_variant: &mut AMFVariantStruct) -> AMF_RESULT {
+pub fn amf_variant_init(p_variant: &mut AMFVariantStruct) -> AMF_RESULT {
     (*p_variant).type_ = AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY;
     AMF_RESULT_AMF_OK
 }
 
 #[inline]
-pub fn AMFAssignPropertySize(
+pub fn amf_assign_property_size(
     res: &mut AMF_RESULT,
     p_this: *mut AMFComponent,
     name: &str,
@@ -126,7 +126,7 @@ pub fn AMFAssignPropertySize(
             },
         },
     };
-    AMFVariantAssignSize(&mut var, val);
+    amf_variant_assign_size(&mut var, val);
     let property_name = U16CString::from_str(name).unwrap();
     unsafe {
         *res = (*p_this).pVtbl.as_ref().unwrap().SetProperty.unwrap()(
@@ -138,7 +138,7 @@ pub fn AMFAssignPropertySize(
 }
 
 #[inline]
-pub fn AMFAssignPropertyInt64(
+pub fn amf_assign_property_int64(
     res: &mut AMF_RESULT,
     p_this: *mut AMFComponent,
     name: &str,
@@ -148,7 +148,7 @@ pub fn AMFAssignPropertyInt64(
         type_: AMF_VARIANT_TYPE_AMF_VARIANT_EMPTY,
         __bindgen_anon_1: AMFVariantStruct__bindgen_ty_1 { int64Value: 0 },
     };
-    AMFVariantAssignInt64(&mut var, val);
+    amf_variant_assign_int64(&mut var, val);
     let property_name = U16CString::from_str(name).unwrap();
     unsafe {
         *res = (*p_this).pVtbl.as_ref().unwrap().SetProperty.unwrap()(

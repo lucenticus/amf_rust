@@ -50,14 +50,14 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
-const memoryTypeIn: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
-const formatIn: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
+const MEMORY_TYPE_IN: AMF_MEMORY_TYPE = AMF_MEMORY_TYPE_AMF_MEMORY_DX11;
+const FORMAT_IN: AMF_SURFACE_FORMAT = AMF_SURFACE_FORMAT_AMF_SURFACE_NV12;
 
-const widthIn: amf_int32 = 1920;
-const heightIn: amf_int32 = 1080;
-const bitRateIn: amf_int64 = 5000000i64;
-const rectSize: amf_int32 = 50;
-const frameCount: amf_int32 = 500;
+const WIDTH_IN: amf_int32 = 1920;
+const HEIGHT_IN: amf_int32 = 1080;
+const BITRATE_IN: amf_int64 = 5000000i64;
+const RECT_SIZE: amf_int32 = 50;
+const FRAME_COUNT: amf_int32 = 500;
 
 fn main() -> std::io::Result<()> {
     amf_factory_helper_init().expect("AMFFactoryHelper_Init failed");
@@ -71,9 +71,9 @@ fn main() -> std::io::Result<()> {
     if res != AMF_RESULT_AMF_OK {
         panic!("InitDX11 failed with result: {:?}", res);
     }
-    let mut pColor1: *mut AMFSurface = std::ptr::null_mut();
-    let mut pColor2: *mut AMFSurface = std::ptr::null_mut();
-    PrepareFillDX11(context, &mut pColor1, &mut pColor2);
+    let mut p_color1: *mut AMFSurface = std::ptr::null_mut();
+    let mut p_color2: *mut AMFSurface = std::ptr::null_mut();
+    prepare_fill_dx11(context, &mut p_color1, &mut p_color2);
 
     let (res_encoder, encoder) =
         create_component(factory, context, "AMFVideoEncoderVCE_AVC");
@@ -83,7 +83,7 @@ fn main() -> std::io::Result<()> {
     }
 
     // Setting parameters for encoder
-    AMFAssignPropertyInt64(
+    amf_assign_property_int64(
         &mut res,
         encoder,
         "Usage",
@@ -91,52 +91,52 @@ fn main() -> std::io::Result<()> {
     );
     println!("AMFAssignPropertyInt64 usage result: {:?}", res);
 
-    AMFAssignPropertyInt64(&mut res, encoder, "TargetBitrate", bitRateIn);
+    amf_assign_property_int64(&mut res, encoder, "TargetBitrate", BITRATE_IN);
     println!("AMFAssignPropertyInt64 bitrate result: {:?}", res);
 
-    let size: AMFSize = AMFSize { width: widthIn, height: heightIn };
-    AMFAssignPropertySize(&mut res, encoder, "FrameSize", size);
-    println!("AMFAssignPropertySize frameSize result: {:?}", res);
+    let size: AMFSize = AMFSize { width: WIDTH_IN, height: HEIGHT_IN };
+    amf_assign_property_size(&mut res, encoder, "FrameSize", size);
+    println!("AMFAssignPropertySize frame size result: {:?}", res);
 
-    res = init_encoder(encoder, formatIn, widthIn, heightIn);
+    res = init_encoder(encoder, FORMAT_IN, WIDTH_IN, HEIGHT_IN);
 
     if res != AMF_RESULT_AMF_OK {
-        panic!("Encoder Init() failed with result: {:?}", res);
+        panic!("init_encoder() failed with result: {:?}", res);
     }
     let mut submitted = 0;
     let mut file = File::create(Path::new("./output.mp4"))?;
-    let mut surfaceIn: *mut AMFSurface = std::ptr::null_mut();
+    let mut surface_in: *mut AMFSurface = std::ptr::null_mut();
 
-    let mut xPos: amf_int32 = 0;
-    let mut yPos: amf_int32 = 0;
+    let mut x_pos: amf_int32 = 0;
+    let mut y_pos: amf_int32 = 0;
 
-    while submitted < frameCount {
-        if surfaceIn.is_null() {
-            let result = alloc_surface(context, memoryTypeIn, formatIn, widthIn, heightIn);
+    while submitted < FRAME_COUNT {
+        if surface_in.is_null() {
+            let result = alloc_surface(context, MEMORY_TYPE_IN, FORMAT_IN, WIDTH_IN, HEIGHT_IN);
             match result {
                 Ok(surface) => {
-                    surfaceIn = surface;
-                    FillSurfaceDX11(
+                    surface_in = surface;
+                    fill_surface_dx11(
                         context,
-                        surfaceIn,
-                        &mut pColor1,
-                        &mut pColor2,
-                        &mut xPos,
-                        &mut yPos,
+                        surface_in,
+                        &mut p_color1,
+                        &mut p_color2,
+                        &mut x_pos,
+                        &mut y_pos,
                     )?;
                 }
                 Err(err) => {
-                    println!("AllocSurface() failed with error: {:?}", err);
+                    println!("alloc_surface() failed with error: {:?}", err);
                     break;
                 }
             }
         }
         // Submit the input surface into encoder
-        let submit_result = submit_input(encoder, surfaceIn);
+        let submit_result = submit_input(encoder, surface_in);
         if submit_result.is_ok() {
-            release(surfaceIn);
-            surfaceIn = std::ptr::null_mut();
-            assert_eq!(submit_result.unwrap(), (), "SubmitInput() failed");
+            release(surface_in);
+            surface_in = std::ptr::null_mut();
+            assert_eq!(submit_result.unwrap(), (), "submit_input() failed");
             submitted += 1;
         }
         // Receive output from encoder
@@ -152,7 +152,7 @@ fn main() -> std::io::Result<()> {
                             release_data(data);
                         }
                         Err(err) => {
-                            println!("QueryInterface() failed with error: {:?}", err);
+                            println!("query_interface() failed with error: {:?}", err);
                             break;
                         }
                     }
@@ -162,11 +162,11 @@ fn main() -> std::io::Result<()> {
                 break; // Drain complete
             }
             Err(AMF_RESULT_AMF_REPEAT) => {
-                println!("Waiting SubmitInput(), will repeat after sleep");
+                println!("Waiting submit_input(), will repeat after sleep");
                 thread::sleep(Duration::from_millis(5));
             }
             Err(err) => {
-                println!("QueryOutput() failed with error: {:?}", err);
+                println!("query_output() failed with error: {:?}", err);
                 break;
             }
         }
@@ -174,8 +174,8 @@ fn main() -> std::io::Result<()> {
     file.flush()?;
     drop(file); // Close the output file
 
-    if !surfaceIn.is_null() {
-        release_surface(surfaceIn);
+    if !surface_in.is_null() {
+        release_surface(surface_in);
     }
     terminate_encoder(encoder);
     release_encoder(encoder);
@@ -188,61 +188,61 @@ fn main() -> std::io::Result<()> {
 fn init_debug_output() {
     let level = AMF_TRACE_DEBUG as i32;
     let previous_level = amf_trace_set_global_level(level);
-    println!("AMFTraceSetGlobalLevel result: {:?}", previous_level);
+    println!("amf_trace_set_global_level result: {:?}", previous_level);
     let console_str = "Console";
     let mut is_ok = amf_trace_enable_writer(console_str, true);
-    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    println!("amf_trace_enable_writer result: {:?}", is_ok);
     is_ok = amf_trace_enable_writer("DebugOutput", true);
-    println!("AMFTraceEnableWriter result: {:?}", is_ok);
+    println!("amf_trace_enable_writer result: {:?}", is_ok);
     let previous_level = amf_trace_set_writer_level(console_str, level);
-    println!("AMFTraceSetWriterLevel result: {:?}", previous_level);
+    println!("amf_trace_set_writer_level result: {:?}", previous_level);
 }
 
-fn PrepareFillDX11(
+fn prepare_fill_dx11(
     context: *mut AMFContext,
-    pColor1: &mut *mut AMFSurface,
-    pColor2: &mut *mut AMFSurface,
+    p_color1: &mut *mut AMFSurface,
+    p_color2: &mut *mut AMFSurface,
 ) {
     let result = alloc_surface(
         context,
         AMF_MEMORY_TYPE_AMF_MEMORY_HOST,
-        formatIn,
-        widthIn,
-        heightIn,
+        FORMAT_IN,
+        WIDTH_IN,
+        HEIGHT_IN,
     );
     match result {
         Ok(surface) => {
-            println!("AllocSurface() result for pColor1: {:?}", AMF_RESULT_AMF_OK);
-            *pColor1 = surface;
+            println!("alloc_surface() result for pColor1: {:?}", AMF_RESULT_AMF_OK);
+            *p_color1 = surface;
         }
         Err(err) => {
-            println!("AllocSurface() for pColor1 failed with error: {:?}", err);
+            println!("alloc_surface() for p_color1 failed with error: {:?}", err);
         }
     }
 
     let result = alloc_surface(
         context,
         AMF_MEMORY_TYPE_AMF_MEMORY_HOST,
-        formatIn,
-        rectSize,
-        rectSize,
+        FORMAT_IN,
+        RECT_SIZE,
+        RECT_SIZE,
     );
     match result {
         Ok(surface) => {
-            println!("AllocSurface() result for pColor2: {:?}", AMF_RESULT_AMF_OK);
-            *pColor2 = surface;
+            println!("alloc_surface() result for p_color2: {:?}", AMF_RESULT_AMF_OK);
+            *p_color2 = surface;
         }
         Err(err) => {
-            println!("AllocSurface() for pColor2 failed with error: {:?}", err);
+            println!("alloc_surface() for p_color2 failed with error: {:?}", err);
         }
     }
-    FillNV12SurfaceWithColor(*pColor2, 128, 0, 128);
-    FillNV12SurfaceWithColor(*pColor1, 128, 255, 128);
-    convert_surface(*pColor1, memoryTypeIn);
-    convert_surface(*pColor2, memoryTypeIn);
+    fill_nv12_surface_with_color(*p_color2, 128, 0, 128);
+    fill_nv12_surface_with_color(*p_color1, 128, 255, 128);
+    convert_surface(*p_color1, MEMORY_TYPE_IN);
+    convert_surface(*p_color2, MEMORY_TYPE_IN);
 }
 
-fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
+fn fill_nv12_surface_with_color(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
     let plane_y = get_plane_at(surface, 0).expect("Failed to get plane Y");
     let plane_uv = get_plane_at(surface, 1).expect("Failed to get plane UV");
     let width_y = get_width(plane_y);
@@ -270,13 +270,13 @@ fn FillNV12SurfaceWithColor(surface: *mut AMFSurface, Y: u8, U: u8, V: u8) {
     }
 }
 
-fn FillSurfaceDX11(
+fn fill_surface_dx11(
     context: *mut AMFContext,
     surface: *mut AMFSurface,
     p_color1: &mut *mut AMFSurface,
     p_color2: &mut *mut AMFSurface,
-    xPos: &mut amf_int32,
-    yPos: &mut amf_int32,
+    x_pos: &mut amf_int32,
+    y_pos: &mut amf_int32,
 ) -> Result<(), std::io::Error> {
     let device_dx11 = get_dx11_device(context);
 
@@ -295,11 +295,11 @@ fn FillSurfaceDX11(
         surface_dx11.cast::<ID3D11Resource>(),
     );
 
-    if *xPos + rectSize > widthIn {
-        *xPos = 0;
+    if *x_pos + RECT_SIZE > WIDTH_IN {
+        *x_pos = 0;
     }
-    if *yPos + rectSize > heightIn {
-        *yPos = 0;
+    if *y_pos + RECT_SIZE > HEIGHT_IN {
+        *y_pos = 0;
     }
 
     // Fill the surface with color2
@@ -307,8 +307,8 @@ fn FillSurfaceDX11(
         left: 0,
         top: 0,
         front: 0,
-        right: rectSize as u32,
-        bottom: rectSize as u32,
+        right: RECT_SIZE as u32,
+        bottom: RECT_SIZE as u32,
         back: 1,
     };
 
@@ -319,8 +319,8 @@ fn FillSurfaceDX11(
         device_context_dx11,
         surface_dx11.cast::<ID3D11Resource>(),
         0,
-        *xPos as u32,
-        *yPos as u32,
+        *x_pos as u32,
+        *y_pos as u32,
         0,
         surface_dx11_color2.cast::<ID3D11Resource>(),
         0,
@@ -330,8 +330,8 @@ fn FillSurfaceDX11(
     flush_device_context(device_context_dx11);
 
     // Update xPos and yPos
-    *xPos += 2;
-    *yPos += 2;
+    *x_pos += 2;
+    *y_pos += 2;
 
     // Release device context
     release_device_context_dx11(device_context_dx11);
